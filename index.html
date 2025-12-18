@@ -718,8 +718,6 @@
                         <div style="font-size:12px; color:var(--text-secondary)">주심: ${currentMatch.mainReferee || '미정'}</div>
                     </div>
                     
-                    ${canEnd ? '<div class="alert">✅ 세트 종료 조건 충족! 세트 종료 버튼을 눌러주세요.</div>' : ''}
-                    
                     <div class="score-grid">
                         <div class="player-score">
                             <div class="player-name">${currentMatch.player1Name}</div>
@@ -781,13 +779,18 @@
                 </div>
                 
                 ${currentMatch.history.length > 0 ? `
-                    <div class="card" aria-live="polite" aria-atomic="false">
+                    <div class="card">
                         <h2>경기 기록</h2>
                         <div id="match-history">
                             ${currentMatch.history.slice(0, 5).map(h => `
-                                <div style="padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:6px; display:flex; justify-content:space-between">
-                                    <span>${h.time} - ${h.player}</span>
-                                    <span style="font-weight:700">${h.type} +${h.points}점</span>
+                                <div style="padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:6px;">
+                                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                                        <span style="font-size:12px; color:var(--text-secondary);">${h.time} - ${h.server || h.player} 서브 ${h.serveNumber || ''}회차</span>
+                                    </div>
+                                    <div style="display:flex; justify-content:space-between;">
+                                        <span>${h.player} ${h.type}</span>
+                                        <span style="font-weight:700; color:var(--primary);">+${h.points}점</span>
+                                    </div>
                                 </div>
                             `).join('')}
                         </div>
@@ -881,12 +884,18 @@
             if (player === 'player1') set.player1 += points;
             else set.player2 += points;
             
+            // 현재 서브 정보 저장
+            const servingPlayer = currentMatch.currentServe === 'player1' ? currentMatch.player1Name : currentMatch.player2Name;
+            const serveNumber = currentMatch.serveCount + 1;
+            
             currentMatch.history.unshift({
                 time: new Date().toLocaleTimeString('ko-KR'),
                 player: player === 'player1' ? currentMatch.player1Name : currentMatch.player2Name,
                 type,
                 points,
-                set: currentMatch.currentSet
+                set: currentMatch.currentSet,
+                server: servingPlayer,
+                serveNumber: serveNumber
             });
             
             currentMatch.serveCount++;
@@ -898,14 +907,14 @@
             const score = player === 'player1' ? set.player1 : set.player2;
             const playerName = player === 'player1' ? currentMatch.player1Name : currentMatch.player2Name;
             
-            // aria-live 실시간 안내
-            const servingPlayer = currentMatch.currentServe === 'player1' ? currentMatch.player1Name : currentMatch.player2Name;
-            const serveCount = currentMatch.serveCount + 1;
-            const announcement = `${type}, ${points}점 ${playerName === (player === 'player1' ? currentMatch.player1Name : currentMatch.player2Name) ? '득점' : '추가'}. 현재 ${currentMatch.player1Name} ${set.player1}점, ${currentMatch.player2Name} ${set.player2}점. ${servingPlayer} 서브 ${serveCount}회차`;
-            announce(announcement);
-            
             saveProjects();
             renderMatch();
+            
+            // aria-live 실시간 안내 (간단하게)
+            const nextServer = currentMatch.currentServe === 'player1' ? currentMatch.player1Name : currentMatch.player2Name;
+            const nextServeCount = currentMatch.serveCount + 1;
+            const announcement = `${type}, ${points}점. ${currentMatch.player1Name} ${set.player1}, ${currentMatch.player2Name} ${set.player2}. 다음 서브 ${nextServer}`;
+            announce(announcement);
             
             // 세트 종료 조건 확인 및 자동 팝업
             const diff = Math.abs(set.player1 - set.player2);
@@ -939,7 +948,8 @@
             }
             
             // aria-live 실시간 안내
-            announce(`마지막 득점 취소됨. 현재 ${currentMatch.player1Name} ${set.player1}점, ${currentMatch.player2Name} ${set.player2}점`);
+            const nextServer = currentMatch.currentServe === 'player1' ? currentMatch.player1Name : currentMatch.player2Name;
+            announce(`취소됨. ${currentMatch.player1Name} ${set.player1}, ${currentMatch.player2Name} ${set.player2}. 다음 서브 ${nextServer}`);
             
             saveProjects();
             renderMatch();
@@ -967,15 +977,17 @@
                 // 개인전만 세트마다 타임아웃 리셋 (팀전은 단판이므로 리셋 없음)
                 if (currentMatch.type === 'individual') {
                     currentMatch.timeouts = { player1: 1, player2: 1 };
+                    announce(`세트 ${prevSet} 종료. 세트 ${currentMatch.currentSet} 시작. 타임아웃 리셋`);
+                } else {
+                    announce(`세트 ${prevSet} 종료. 세트 ${currentMatch.currentSet} 시작`);
                 }
-                announce(`세트 ${prevSet} 종료. 세트 ${currentMatch.currentSet} 시작. 타임아웃 리셋됨`);
                 saveProjects();
                 renderMatch();
             } else {
                 if (confirm('경기를 종료하시겠습니까?')) {
                     currentMatch.status = 'finished';
                     currentMatch.finishedAt = new Date().toISOString();
-                    announce(`경기 종료. 최종 점수 ${currentMatch.player1Name} ${set.player1}점, ${currentMatch.player2Name} ${set.player2}점`);
+                    announce(`경기 종료. ${currentMatch.player1Name} ${set.player1}, ${currentMatch.player2Name} ${set.player2}`);
                     saveProjects();
                     goTo('project-detail');
                 }
@@ -996,7 +1008,7 @@
             timeoutSeconds = 60;
             updateTimerDisplay();
             speak(`${playerName} 타임아웃 시작. 60초`);
-            announce(`${playerName} 타임아웃 시작. 60초. 남은 타임아웃 횟수 ${currentMatch.timeouts[player]}번`);
+            announce(`${playerName} 타임아웃 시작. 남은 횟수 ${currentMatch.timeouts[player]}`);
             
             timeoutTimer = setInterval(() => {
                 timeoutSeconds--;
@@ -1004,7 +1016,7 @@
                 
                 if (timeoutSeconds === 15) {
                     speak('15초 남음');
-                    announce('타임아웃 15초 남음');
+                    announce('15초 남음');
                     document.getElementById('timer-display').classList.add('warning');
                 } else if (timeoutSeconds === 0) {
                     speak('타임아웃 종료');
