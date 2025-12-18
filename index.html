@@ -445,6 +445,7 @@
     <script>
         // 음성 안내
         let voiceEnabled = localStorage.getItem('voice') !== 'false';
+        let isTimeoutActive = false;
         
         function speak(text) {
             if (!voiceEnabled) return;
@@ -686,14 +687,6 @@
             const canEnd = Math.max(set.player1, set.player2) >= currentMatch.winScore && 
                           Math.abs(set.player1 - set.player2) >= 2;
             
-            const player1Fouls = FOULS.map(f => 
-                `<button class="foul-btn" onclick="addScore('player1', 1, '${f.name}')">${f.name}<span style="font-size:12px">+1점</span></button>`
-            ).join('');
-            
-            const player2Fouls = FOULS.map(f => 
-                `<button class="foul-btn" onclick="addScore('player2', 1, '${f.name}')">${f.name}<span style="font-size:12px">+1점</span></button>`
-            ).join('');
-            
             app.innerHTML = `
                 <div class="card">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
@@ -707,35 +700,54 @@
                         <div class="player-score">
                             <div class="player-name">${currentMatch.player1Name}</div>
                             <div class="score-display">${set.player1}</div>
-                            ${currentMatch.currentServe === 'player1' ? `<div class="serve-indicator">🎾 서브 ${currentMatch.serveCount + 1}회차</div>` : ''}
                         </div>
                         <div style="font-size:24px; font-weight:700; color:var(--text-secondary)">VS</div>
                         <div class="player-score">
                             <div class="player-name">${currentMatch.player2Name}</div>
                             <div class="score-display">${set.player2}</div>
-                            ${currentMatch.currentServe === 'player2' ? `<div class="serve-indicator">🎾 서브 ${currentMatch.serveCount + 1}회차</div>` : ''}
                         </div>
+                    </div>
+                    
+                    <div style="text-align:center; padding:12px; background:var(--bg-secondary); border-radius:8px; margin-bottom:16px;">
+                        <div class="serve-indicator">🎾 ${currentMatch.currentServe === 'player1' ? currentMatch.player1Name : currentMatch.player2Name} - 서브 ${currentMatch.serveCount + 1}회차</div>
                     </div>
                     
                     <h3 style="margin-bottom:8px;">⏱️ 타임아웃</h3>
                     <div class="timeout-section">
-                        <button class="timeout-btn" onclick="startTimeout('player1')" ${currentMatch.timeouts.player1 === 0 ? 'disabled' : ''}>
+                        <button class="timeout-btn" onclick="startTimeout('player1')" ${currentMatch.timeouts.player1 === 0 || isTimeoutActive ? 'disabled' : ''}>
                             ${currentMatch.player1Name} 타임아웃
                             <span class="timeout-count">남은 횟수: ${currentMatch.timeouts.player1}</span>
                         </button>
-                        <button class="timeout-btn" onclick="startTimeout('player2')" ${currentMatch.timeouts.player2 === 0 ? 'disabled' : ''}>
+                        <button class="timeout-btn" onclick="startTimeout('player2')" ${currentMatch.timeouts.player2 === 0 || isTimeoutActive ? 'disabled' : ''}>
                             ${currentMatch.player2Name} 타임아웃
                             <span class="timeout-count">남은 횟수: ${currentMatch.timeouts.player2}</span>
                         </button>
                     </div>
                     
-                    <h3 style="margin-top:24px; margin-bottom:12px;">${currentMatch.player1Name} 득점</h3>
-                    <button class="foul-btn goal-btn" onclick="addScore('player1', 2, '골')">⚫ 골 <span style="font-size:14px">+2점</span></button>
-                    <div class="foul-grid">${player1Fouls}</div>
+                    <h3 style="margin-top:24px; margin-bottom:12px;">득점 기록</h3>
                     
-                    <h3 style="margin-top:24px; margin-bottom:12px;">${currentMatch.player2Name} 득점</h3>
-                    <button class="foul-btn goal-btn" onclick="addScore('player2', 2, '골')">⚫ 골 <span style="font-size:14px">+2점</span></button>
-                    <div class="foul-grid">${player2Fouls}</div>
+                    <!-- 골 득점 (좌우 배치) -->
+                    <div class="foul-grid">
+                        <button class="foul-btn goal-btn" onclick="addScore('player1', 2, '${currentMatch.player1Name} 골')" ${isTimeoutActive ? 'disabled' : ''}>
+                            ${currentMatch.player1Name}<br>골 +2점
+                        </button>
+                        <button class="foul-btn goal-btn" onclick="addScore('player2', 2, '${currentMatch.player2Name} 골')" ${isTimeoutActive ? 'disabled' : ''}>
+                            ${currentMatch.player2Name}<br>골 +2점
+                        </button>
+                    </div>
+                    
+                    <!-- 파울 (상대 득점) -->
+                    <h4 style="margin:16px 0 8px; font-size:14px; color:var(--text-secondary);">파울 (상대에게 +1점)</h4>
+                    ${FOULS.map(f => `
+                        <div class="foul-grid">
+                            <button class="foul-btn" onclick="addScore('player2', 1, '${currentMatch.player1Name} ${f.name}')" ${isTimeoutActive ? 'disabled' : ''}>
+                                ${currentMatch.player1Name}<br>${f.name}
+                            </button>
+                            <button class="foul-btn" onclick="addScore('player1', 1, '${currentMatch.player2Name} ${f.name}')" ${isTimeoutActive ? 'disabled' : ''}>
+                                ${currentMatch.player2Name}<br>${f.name}
+                            </button>
+                        </div>
+                    `).join('')}
                     
                     <div class="action-row">
                         <button class="btn btn-danger" onclick="undo()" ${currentMatch.history.length === 0 ? 'disabled' : ''}>↩️ 취소</button>
@@ -745,14 +757,16 @@
                 </div>
                 
                 ${currentMatch.history.length > 0 ? `
-                    <div class="card">
+                    <div class="card" aria-live="polite" aria-atomic="false">
                         <h2>경기 기록</h2>
-                        ${currentMatch.history.slice(0, 5).map(h => `
-                            <div style="padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:6px; display:flex; justify-content:space-between">
-                                <span>${h.time} - ${h.player}</span>
-                                <span style="font-weight:700">${h.type} +${h.points}점</span>
-                            </div>
-                        `).join('')}
+                        <div id="match-history">
+                            ${currentMatch.history.slice(0, 5).map(h => `
+                                <div style="padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:6px; display:flex; justify-content:space-between">
+                                    <span>${h.time} - ${h.player}</span>
+                                    <span style="font-weight:700">${h.type} +${h.points}점</span>
+                                </div>
+                            `).join('')}
+                        </div>
                     </div>
                 ` : ''}
             `;
@@ -933,8 +947,9 @@
         }
 
         function startTimeout(player) {
-            if (currentMatch.timeouts[player] === 0) return;
+            if (currentMatch.timeouts[player] === 0 || isTimeoutActive) return;
             
+            isTimeoutActive = true;
             currentMatch.timeouts[player]--;
             saveProjects();
             
@@ -960,6 +975,7 @@
             }, 1000);
             
             renderMatch();
+            renderMatch();
         }
 
         function updateTimerDisplay() {
@@ -971,6 +987,8 @@
             document.getElementById('timeout-modal').classList.remove('active');
             document.getElementById('timer-display').classList.remove('warning');
             timeoutSeconds = 60;
+            isTimeoutActive = false;
+            renderMatch();
         }
 
         function deleteMatch(event, index) {
@@ -996,7 +1014,7 @@
         
         const currentTheme = themes[currentThemeIndex];
         document.getElementById('theme-btn').textContent = `모드: ${currentTheme.name}`;
-        document.getElementById('voice-btn').style.opacity = voiceEnabled ? '1' : '0.5';
+    document.getElementById('voice-btn').style.opacity = voiceEnabled ? '1' : '0.5';
         render();
     </script>
 </body>
