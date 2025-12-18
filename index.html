@@ -80,6 +80,19 @@
             transition: background 0.3s, color 0.3s;
         }
         
+        /* 스크린 리더 전용 (화면에 보이지 않음) */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+        
         *:focus {
             outline: 3px solid var(--primary);
             outline-offset: 2px;
@@ -433,6 +446,9 @@
 
     <div id="app" class="container"></div>
 
+    <!-- aria-live 실시간 안내 (화면에 보이지 않음, 스크린 리더만) -->
+    <div aria-live="assertive" aria-atomic="true" class="sr-only" id="live-announcement"></div>
+
     <!-- 타임아웃 모달 -->
     <div id="timeout-modal" class="modal">
         <div class="modal-content">
@@ -454,6 +470,14 @@
             utterance.rate = 1.1;
             speechSynthesis.cancel();
             speechSynthesis.speak(utterance);
+        }
+
+        // aria-live 실시간 안내 (스크린 리더용)
+        function announce(text) {
+            const liveRegion = document.getElementById('live-announcement');
+            if (liveRegion) {
+                liveRegion.textContent = text;
+            }
         }
 
         // 테마 순환
@@ -831,8 +855,8 @@
                 currentServe: 'player1',
                 serveCount: 0,
                 timeouts: {
-                    player1: type === 'individual' ? sets : 2,
-                    player2: type === 'individual' ? sets : 2
+                    player1: 1,
+                    player2: 1
                 },
                 status: 'active',
                 history: [],
@@ -874,6 +898,12 @@
             const score = player === 'player1' ? set.player1 : set.player2;
             const playerName = player === 'player1' ? currentMatch.player1Name : currentMatch.player2Name;
             
+            // aria-live 실시간 안내
+            const servingPlayer = currentMatch.currentServe === 'player1' ? currentMatch.player1Name : currentMatch.player2Name;
+            const serveCount = currentMatch.serveCount + 1;
+            const announcement = `${type}, ${points}점 ${playerName === (player === 'player1' ? currentMatch.player1Name : currentMatch.player2Name) ? '득점' : '추가'}. 현재 ${currentMatch.player1Name} ${set.player1}점, ${currentMatch.player2Name} ${set.player2}점. ${servingPlayer} 서브 ${serveCount}회차`;
+            announce(announcement);
+            
             saveProjects();
             renderMatch();
             
@@ -908,6 +938,9 @@
                 currentMatch.serveCount = 1;
             }
             
+            // aria-live 실시간 안내
+            announce(`마지막 득점 취소됨. 현재 ${currentMatch.player1Name} ${set.player1}점, ${currentMatch.player2Name} ${set.player2}점`);
+            
             saveProjects();
             renderMatch();
         }
@@ -927,19 +960,22 @@
             }
             
             if (currentMatch.currentSet < currentMatch.sets) {
+                const prevSet = currentMatch.currentSet;
                 currentMatch.currentSet++;
                 currentMatch.setScores.push({player1: 0, player2: 0});
                 currentMatch.serveCount = 0;
-                // 개인전은 세트마다 타임아웃 리셋
+                // 개인전만 세트마다 타임아웃 리셋 (팀전은 단판이므로 리셋 없음)
                 if (currentMatch.type === 'individual') {
                     currentMatch.timeouts = { player1: 1, player2: 1 };
                 }
+                announce(`세트 ${prevSet} 종료. 세트 ${currentMatch.currentSet} 시작. 타임아웃 리셋됨`);
                 saveProjects();
                 renderMatch();
             } else {
                 if (confirm('경기를 종료하시겠습니까?')) {
                     currentMatch.status = 'finished';
                     currentMatch.finishedAt = new Date().toISOString();
+                    announce(`경기 종료. 최종 점수 ${currentMatch.player1Name} ${set.player1}점, ${currentMatch.player2Name} ${set.player2}점`);
                     saveProjects();
                     goTo('project-detail');
                 }
@@ -960,6 +996,7 @@
             timeoutSeconds = 60;
             updateTimerDisplay();
             speak(`${playerName} 타임아웃 시작. 60초`);
+            announce(`${playerName} 타임아웃 시작. 60초. 남은 타임아웃 횟수 ${currentMatch.timeouts[player]}번`);
             
             timeoutTimer = setInterval(() => {
                 timeoutSeconds--;
@@ -967,14 +1004,15 @@
                 
                 if (timeoutSeconds === 15) {
                     speak('15초 남음');
+                    announce('타임아웃 15초 남음');
                     document.getElementById('timer-display').classList.add('warning');
                 } else if (timeoutSeconds === 0) {
                     speak('타임아웃 종료');
+                    announce('타임아웃 종료');
                     closeTimeout();
                 }
             }, 1000);
             
-            renderMatch();
             renderMatch();
         }
 
@@ -1014,7 +1052,7 @@
         
         const currentTheme = themes[currentThemeIndex];
         document.getElementById('theme-btn').textContent = `모드: ${currentTheme.name}`;
-    document.getElementById('voice-btn').style.opacity = voiceEnabled ? '1' : '0.5';
+        document.getElementById('voice-btn').style.opacity = voiceEnabled ? '1' : '0.5';
         render();
     </script>
 </body>
