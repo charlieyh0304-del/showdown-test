@@ -522,13 +522,13 @@
         }
 
         const FOULS = [
-            { id: 'irregular-serve', name: '부정 서브' },
-            { id: 'centerboard', name: '센터보드' },
-            { id: 'body-touch', name: '바디터치' },
-            { id: 'out', name: '아웃' },
-            { id: 'mask-touch', name: '고글터치' },
-            { id: 'delay', name: '지연행위' },
-            { id: '2-second', name: '2초룰' }
+            { id: 'irregular-serve', name: '부정 서브', points: 1 },
+            { id: 'centerboard', name: '센터보드', points: 1 },
+            { id: 'body-touch', name: '바디터치', points: 1 },
+            { id: 'out', name: '아웃', points: 1 },
+            { id: 'mask-touch', name: '고글터치', points: 2 },
+            { id: 'delay', name: '지연행위', points: 1 },
+            { id: '2-second', name: '2초룰', points: 1 }
         ];
 
         function render() {
@@ -759,17 +759,77 @@
                     </div>
                     
                     <!-- 파울 (상대 득점) -->
-                    <h4 style="margin:16px 0 8px; font-size:14px; color:var(--text-secondary);">파울 (상대에게 +1점)</h4>
-                    ${FOULS.map(f => `
-                        <div class="foul-grid">
-                            <button class="foul-btn" onclick="addScore('player2', 1, '${currentMatch.player1Name} ${f.name}')" ${isTimeoutActive ? 'disabled' : ''}>
-                                ${currentMatch.player1Name}<br>${f.name}
-                            </button>
-                            <button class="foul-btn" onclick="addScore('player1', 1, '${currentMatch.player2Name} ${f.name}')" ${isTimeoutActive ? 'disabled' : ''}>
-                                ${currentMatch.player2Name}<br>${f.name}
-                            </button>
-                        </div>
-                    `).join('')}
+                    <h4 style="margin:16px 0 8px; font-size:14px; color:var(--text-secondary);">파울 (상대 득점)</h4>
+                    
+                    <!-- 부정 서브 +1점 -->
+                    <div class="foul-grid">
+                        <button class="foul-btn" onclick="addScore('player2', 1, '${currentMatch.player1Name} 부정 서브')" ${isTimeoutActive ? 'disabled' : ''}>
+                            ${currentMatch.player1Name}<br>부정 서브 +1점
+                        </button>
+                        <button class="foul-btn" onclick="addScore('player1', 1, '${currentMatch.player2Name} 부정 서브')" ${isTimeoutActive ? 'disabled' : ''}>
+                            ${currentMatch.player2Name}<br>부정 서브 +1점
+                        </button>
+                    </div>
+                    
+                    <!-- 센터보드 +1점 -->
+                    <div class="foul-grid">
+                        <button class="foul-btn" onclick="addScore('player2', 1, '${currentMatch.player1Name} 센터보드')" ${isTimeoutActive ? 'disabled' : ''}>
+                            ${currentMatch.player1Name}<br>센터보드 +1점
+                        </button>
+                        <button class="foul-btn" onclick="addScore('player1', 1, '${currentMatch.player2Name} 센터보드')" ${isTimeoutActive ? 'disabled' : ''}>
+                            ${currentMatch.player2Name}<br>센터보드 +1점
+                        </button>
+                    </div>
+                    
+                    <!-- 바디터치 +1점 -->
+                    <div class="foul-grid">
+                        <button class="foul-btn" onclick="addScore('player2', 1, '${currentMatch.player1Name} 바디터치')" ${isTimeoutActive ? 'disabled' : ''}>
+                            ${currentMatch.player1Name}<br>바디터치 +1점
+                        </button>
+                        <button class="foul-btn" onclick="addScore('player1', 1, '${currentMatch.player2Name} 바디터치')" ${isTimeoutActive ? 'disabled' : ''}>
+                            ${currentMatch.player2Name}<br>바디터치 +1점
+                        </button>
+                    </div>
+                    
+                    <!-- 아웃 +1점 -->
+                    <div class="foul-grid">
+                        <button class="foul-btn" onclick="addScore('player2', 1, '${currentMatch.player1Name} 아웃')" ${isTimeoutActive ? 'disabled' : ''}>
+                            ${currentMatch.player1Name}<br>아웃 +1점
+                        </button>
+                        <button class="foul-btn" onclick="addScore('player1', 1, '${currentMatch.player2Name} 아웃')" ${isTimeoutActive ? 'disabled' : ''}>
+                            ${currentMatch.player2Name}<br>아웃 +1점
+                        </button>
+                    </div>
+                    
+                    <!-- 고글터치 +2점 (중요!) -->
+                    <div class="foul-grid">
+                        <button class="foul-btn" onclick="addScore('player2', 2, '${currentMatch.player1Name} 고글터치')" ${isTimeoutActive ? 'disabled' : ''}>
+                            ${currentMatch.player1Name}<br>고글터치 +2점
+                        </button>
+                        <button class="foul-btn" onclick="addScore('player1', 2, '${currentMatch.player2Name} 고글터치')" ${isTimeoutActive ? 'disabled' : ''}>
+                            ${currentMatch.player2Name}<br>고글터치 +2점
+                        </button>
+                    </div>
+                    
+                    <!-- 지연행위 +1점 -->
+                    <div class="foul-grid">
+                        <button class="foul-btn" onclick="addScore('player2', 1, '${currentMatch.player1Name} 지연행위')" ${isTimeoutActive ? 'disabled' : ''}>
+                            ${currentMatch.player1Name}<br>지연행위 +1점
+                        </button>
+                        <button class="foul-btn" onclick="addScore('player1', 1, '${currentMatch.player2Name} 지연행위')" ${isTimeoutActive ? 'disabled' : ''}>
+                            ${currentMatch.player2Name}<br>지연행위 +1점
+                        </button>
+                    </div>
+                    
+                    <!-- 2초룰 +1점 -->
+                    <div class="foul-grid">
+                        <button class="foul-btn" onclick="addScore('player2', 1, '${currentMatch.player1Name} 2초룰')" ${isTimeoutActive ? 'disabled' : ''}>
+                            ${currentMatch.player1Name}<br>2초룰 +1점
+                        </button>
+                        <button class="foul-btn" onclick="addScore('player1', 1, '${currentMatch.player2Name} 2초룰')" ${isTimeoutActive ? 'disabled' : ''}>
+                            ${currentMatch.player2Name}<br>2초룰 +1점
+                        </button>
+                    </div>
                     
                     <div class="action-row">
                         <button class="btn btn-danger" onclick="undo()" ${currentMatch.history.length === 0 ? 'disabled' : ''}>↩️ 취소</button>
@@ -899,7 +959,8 @@
             });
             
             currentMatch.serveCount++;
-            if (currentMatch.serveCount >= 2) {
+            const maxServes = currentMatch.type === 'individual' ? 2 : 3;
+            if (currentMatch.serveCount >= maxServes) {
                 currentMatch.currentServe = currentMatch.currentServe === 'player1' ? 'player2' : 'player1';
                 currentMatch.serveCount = 0;
             }
@@ -944,7 +1005,8 @@
             currentMatch.serveCount--;
             if (currentMatch.serveCount < 0) {
                 currentMatch.currentServe = currentMatch.currentServe === 'player1' ? 'player2' : 'player1';
-                currentMatch.serveCount = 1;
+                const maxServes = currentMatch.type === 'individual' ? 2 : 3;
+                currentMatch.serveCount = maxServes - 1;
             }
             
             // aria-live 실시간 안내
