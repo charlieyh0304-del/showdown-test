@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="쇼다운 심판 앱 프로 - 프로젝트 관리, 심판 정보, 타임아웃 기능">
+    <title>쇼다운 심판 앱 PRO</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        /* 테마 변수 */
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fa;
+            --bg-card: #ffffff;
+            --text-primary: #202124;
+            --text-secondary: #5f6368;
+            --border: #dadce0;
+            --primary: #1a73e8;
+            --primary-hover: #1557b0;
+            --success: #34a853;
+            --warning: #fbbc04;
+            --danger: #ea4335;
+            --shadow: rgba(0,0,0,0.1);
+        }
+        
+        body.enhanced-contrast {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f0f0f0;
+            --bg-card: #ffffff;
+            --text-primary: #000000;
+            --text-secondary: #333333;
+            --border: #999999;
+            --primary: #0066cc;
+            --success: #228b22;
+            --warning: #cc9900;
+            --danger: #cc0000;
+        }
+        
+        body.high-contrast {
+            --bg-primary: #ffffff;
+            --text-primary: #000000;
+            --border: #000000;
+            --primary: #0000ff;
+            --success: #008000;
+            --warning: #ff8c00;
+            --danger: #ff0000;
+        }
+        
+        body.inverted {
+            --bg-primary: #000000;
+            --bg-secondary: #1a1a1a;
+            --bg-card: #000000;
+            --text-primary: #ffffff;
+            --text-secondary: #cccccc;
+            --border: #666666;
+            --primary: #66b3ff;
+            --success: #66ff66;
+            --warning: #ffcc66;
+            --danger: #ff6666;
+        }
+        
+        body.dark {
+            --bg-primary: #121212;
+            --bg-secondary: #1e1e1e;
+            --bg-card: #2d2d2d;
+            --text-primary: #e0e0e0;
+            --text-secondary: #b0b0b0;
+            --border: #444444;
+            --primary: #4d9eff;
+            --success: #4ade80;
+            --warning: #fbbf24;
+            --danger: #f87171;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background 0.3s, color 0.3s;
+        }
+        
+        *:focus {
+            outline: 3px solid var(--primary);
+            outline-offset: 2px;
+        }
+        
+        .accessibility-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg-card);
+            border-bottom: 2px solid var(--border);
+            padding: 8px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+            box-shadow: 0 2px 8px var(--shadow);
+        }
+        
+        .accessibility-controls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .a11y-btn {
+            min-width: 44px;
+            min-height: 44px;
+            padding: 8px 12px;
+            border: 2px solid var(--border);
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            transition: all 0.2s;
+        }
+        
+        .a11y-btn:hover, .a11y-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 70px 20px 20px;
+            min-height: 100vh;
+        }
+        
+        .header {
+            text-align: center;
+            padding: 24px;
+            background: var(--bg-card);
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px var(--shadow);
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+        
+        .card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px var(--shadow);
+            border: 1px solid var(--border);
+        }
+        
+        .card h2 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+        
+        .btn {
+            padding: 16px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            min-height: 48px;
+            margin-bottom: 12px;
+            transition: all 0.2s;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-primary { 
+            background: var(--primary); 
+            color: white;
+            border-color: var(--primary);
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            background: var(--primary-hover);
+        }
+        
+        .btn-success { background: var(--success); color: white; border-color: var(--success); }
+        .btn-warning { background: var(--warning); color: white; border-color: var(--warning); }
+        .btn-danger { background: var(--danger); color: white; border-color: var(--danger); }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 16px;
+            margin: 8px 0;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--primary);
+        }
+        
+        label {
+            display: block;
+            font-weight: 600;
+            margin-top: 12px;
+            margin-bottom: 4px;
+        }
+        
+        .score-grid {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 20px;
+            align-items: center;
+            margin: 24px 0;
+        }
+        
+        .player-score {
+            text-align: center;
+        }
+        
+        .score-display {
+            font-size: 72px;
+            font-weight: 700;
+            color: var(--primary);
+            line-height: 1;
+        }
+        
+        .player-name {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        
+        .serve-indicator {
+            margin-top: 8px;
+            font-size: 14px;
+            color: var(--success);
+            font-weight: 600;
+        }
+        
+        .timeout-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin: 16px 0;
+        }
+        
+        .timeout-btn {
+            padding: 12px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            background: var(--warning);
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .timeout-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+        
+        .timeout-count {
+            font-size: 12px;
+        }
+        
+        .foul-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .foul-btn {
+            padding: 16px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            min-height: 60px;
+            background: var(--warning);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+        
+        .goal-btn {
+            background: var(--success);
+            grid-column: 1 / -1;
+            min-height: 80px;
+            font-size: 18px;
+        }
+        
+        .action-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        
+        .folder-item, .match-item {
+            padding: 16px;
+            background: var(--bg-secondary);
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            margin: 12px 0;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .folder-item:hover, .match-item:hover {
+            border-color: var(--primary);
+            box-shadow: 0 4px 12px var(--shadow);
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 32px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        
+        .timer-display {
+            font-size: 96px;
+            font-weight: 700;
+            color: var(--primary);
+            margin: 24px 0;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .timer-display.warning {
+            color: var(--danger);
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .alert {
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-weight: 600;
+            border: 2px solid var(--success);
+            background: var(--bg-secondary);
+            text-align: center;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 12px;
+        }
+        
+        .info-item {
+            padding: 12px;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+        
+        .info-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+        
+        .info-value {
+            font-weight: 600;
+        }
+        
+        @media (max-width: 600px) {
+            .score-display { font-size: 56px; }
+            .timer-display { font-size: 72px; }
+            .foul-grid { grid-template-columns: 1fr; }
+            .info-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="accessibility-bar">
+        <div style="font-weight: 600; font-size: 14px;">접근성</div>
+        <div class="accessibility-controls">
+            <button class="a11y-btn" onclick="cycleTheme()" id="theme-btn">모드: 일반</button>
+            <button class="a11y-btn" onclick="toggleVoice()" id="voice-btn">🔊</button>
+        </div>
+    </div>
+
+    <div id="app" class="container"></div>
+
+    <!-- 타임아웃 모달 -->
+    <div id="timeout-modal" class="modal">
+        <div class="modal-content">
+            <h2 id="timeout-title">타임아웃</h2>
+            <div id="timer-display" class="timer-display">60</div>
+            <button class="btn btn-danger" onclick="closeTimeout()" style="width:100%">타임아웃 종료</button>
+        </div>
+    </div>
+
+    <script>
+        // 음성 안내
+        let voiceEnabled = localStorage.getItem('voice') !== 'false';
+        
+        function speak(text) {
+            if (!voiceEnabled) return;
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'ko-KR';
+            utterance.rate = 1.1;
+            speechSynthesis.cancel();
+            speechSynthesis.speak(utterance);
+        }
+
+        // 테마 순환
+        const themes = [
+            { id: 'normal', name: '일반' },
+            { id: 'enhanced-contrast', name: '명도대비' },
+            { id: 'high-contrast', name: '고대비' },
+            { id: 'inverted', name: '색반전' },
+            { id: 'dark', name: '다크' }
+        ];
+        let currentThemeIndex = 0;
+
+        function cycleTheme() {
+            currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+            const theme = themes[currentThemeIndex];
+            
+            document.body.className = theme.id === 'normal' ? '' : theme.id;
+            localStorage.setItem('theme', theme.id);
+            localStorage.setItem('themeIndex', currentThemeIndex);
+            
+            document.getElementById('theme-btn').textContent = `모드: ${theme.name}`;
+            speak(`${theme.name} 모드로 변경됨`);
+        }
+
+        function toggleVoice() {
+            voiceEnabled = !voiceEnabled;
+            localStorage.setItem('voice', voiceEnabled);
+            speak(voiceEnabled ? '음성 안내 켜짐' : '음성 안내 꺼짐');
+            document.getElementById('voice-btn').style.opacity = voiceEnabled ? '1' : '0.5';
+        }
+
+        // 데이터 구조
+        let projects = JSON.parse(localStorage.getItem('projects') || '[]');
+        let currentProject = null;
+        let currentMatch = null;
+        let screen = 'home';
+        let timeoutTimer = null;
+        let timeoutSeconds = 60;
+
+        function saveProjects() {
+            localStorage.setItem('projects', JSON.stringify(projects));
+        }
+
+        const FOULS = [
+            { id: 'irregular-serve', name: '부정 서브' },
+            { id: 'centerboard', name: '센터보드' },
+            { id: 'body-touch', name: '바디터치' },
+            { id: 'out', name: '아웃' },
+            { id: 'mask-touch', name: '고글터치' },
+            { id: 'delay', name: '지연행위' },
+            { id: '2-second', name: '2초룰' }
+        ];
+
+        function render() {
+            const app = document.getElementById('app');
+            
+            if (screen === 'home') {
+                app.innerHTML = `
+                    <div class="header">
+                        <h1>⚫ 쇼다운 심판 앱 PRO</h1>
+                        <p>프로젝트 관리 · 심판 정보 · 타임아웃 기능</p>
+                    </div>
+                    <div class="card">
+                        <h2>프로젝트 관리</h2>
+                        <button class="btn btn-primary" onclick="goTo('create-project')">📁 새 프로젝트 생성</button>
+                        <button class="btn btn-primary" onclick="goTo('project-list')">📂 프로젝트 목록</button>
+                    </div>
+                `;
+            }
+            else if (screen === 'create-project') {
+                app.innerHTML = `
+                    <div class="card">
+                        <h2>새 프로젝트 생성</h2>
+                        <label>프로젝트명 *</label>
+                        <input type="text" id="project-name" placeholder="예: 2025 전국장애인체육대회">
+                        <label>날짜 (선택사항)</label>
+                        <input type="text" id="project-date" placeholder="예: 2025-03-15 또는 3월 15일">
+                        <label>장소 (선택사항)</label>
+                        <input type="text" id="project-location" placeholder="예: 서울종합운동장">
+                        <label>설명 (선택사항)</label>
+                        <textarea id="project-desc" rows="3" placeholder="프로젝트 설명"></textarea>
+                        <div class="action-row">
+                            <button class="btn btn-danger" onclick="goTo('home')">취소</button>
+                            <button class="btn btn-primary" onclick="createProject()">생성</button>
+                        </div>
+                    </div>
+                `;
+            }
+            else if (screen === 'project-list') {
+                app.innerHTML = `
+                    <div class="card">
+                        <h2>프로젝트 목록</h2>
+                        ${projects.length === 0 ? 
+                            '<p style="text-align:center; padding:40px; color:var(--text-secondary)">생성된 프로젝트가 없습니다.</p>' :
+                            projects.map((p, i) => `
+                                <div class="folder-item" onclick="selectProject(${i})">
+                                    <h4>📁 ${p.name}</h4>
+                                    <p style="color:var(--text-secondary); font-size:14px; margin-top:4px">
+                                        ${p.date || '날짜 미정'} · ${p.location || '장소 미정'} · 경기 ${p.matches.length}개
+                                    </p>
+                                </div>
+                            `).join('')
+                        }
+                        <button class="btn btn-primary" onclick="goTo('home')" style="margin-top:12px">🏠 홈으로</button>
+                    </div>
+                `;
+            }
+            else if (screen === 'project-detail') {
+                const active = currentProject.matches.filter(m => m.status === 'active');
+                const finished = currentProject.matches.filter(m => m.status === 'finished');
+                
+                app.innerHTML = `
+                    <div class="card">
+                        <h2>📁 ${currentProject.name}</h2>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <div class="info-label">날짜</div>
+                                <div class="info-value">${currentProject.date || '미정'}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">장소</div>
+                                <div class="info-value">${currentProject.location || '미정'}</div>
+                            </div>
+                        </div>
+                        ${currentProject.desc ? `<p style="margin-top:12px; color:var(--text-secondary)">${currentProject.desc}</p>` : ''}
+                    </div>
+                    <div class="card">
+                        <h2>경기 관리</h2>
+                        <button class="btn btn-primary" onclick="goTo('create-match')">➕ 새 경기 생성</button>
+                        
+                        ${active.length > 0 ? `
+                            <h3 style="color:var(--success); margin:16px 0">진행 중인 경기</h3>
+                            ${active.map((m, i) => `
+                                <div class="match-item" style="position:relative">
+                                    <div onclick="selectMatch(${currentProject.matches.indexOf(m)})" style="cursor:pointer">
+                                        <h4>${m.player1Name} vs ${m.player2Name}</h4>
+                                        <p style="color:var(--text-secondary); font-size:14px; margin-top:4px">
+                                            세트 ${m.currentSet}/${m.sets} · 주심: ${m.mainReferee || '미정'}
+                                        </p>
+                                    </div>
+                                    <button onclick="deleteMatch(event, ${currentProject.matches.indexOf(m)})" 
+                                            style="position:absolute; top:12px; right:12px; min-width:40px; min-height:40px; padding:8px; background:var(--danger); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:600;">
+                                        🗑️
+                                    </button>
+                                </div>
+                            `).join('')}
+                        ` : ''}
+                        
+                        ${finished.length > 0 ? `
+                            <h3 style="color:var(--text-secondary); margin:24px 0 16px">완료된 경기</h3>
+                            ${finished.map((m, i) => `
+                                <div class="match-item" style="position:relative">
+                                    <div onclick="selectMatch(${currentProject.matches.indexOf(m)})" style="cursor:pointer">
+                                        <h4>${m.player1Name} vs ${m.player2Name}</h4>
+                                        <p style="color:var(--text-secondary); font-size:14px; margin-top:4px">
+                                            완료 · 주심: ${m.mainReferee || '미정'}
+                                        </p>
+                                    </div>
+                                    <button onclick="deleteMatch(event, ${currentProject.matches.indexOf(m)})" 
+                                            style="position:absolute; top:12px; right:12px; min-width:40px; min-height:40px; padding:8px; background:var(--danger); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:600;">
+                                        🗑️
+                                    </button>
+                                </div>
+                            `).join('')}
+                        ` : ''}
+                        
+                        <button class="btn" onclick="goTo('project-list')" style="margin-top:12px">← 프로젝트 목록</button>
+                    </div>
+                `;
+            }
+            else if (screen === 'create-match') {
+                app.innerHTML = `
+                    <div class="card">
+                        <h2>새 경기 생성</h2>
+                        
+                        <h3 style="margin-top:20px">경기 정보</h3>
+                        <label>경기 유형 *</label>
+                        <select id="match-type">
+                            <option value="individual">개인전</option>
+                            <option value="team">팀전</option>
+                        </select>
+                        <div id="sets-div">
+                            <label>세트 수 *</label>
+                            <select id="sets">
+                                <option value="3">3세트</option>
+                                <option value="5">5세트</option>
+                            </select>
+                        </div>
+                        
+                        <h3 style="margin-top:20px">선수 정보</h3>
+                        <label id="player1-label">선수 1 이름 *</label>
+                        <input type="text" id="player1" placeholder="선수 1">
+                        <label id="player2-label">선수 2 이름 *</label>
+                        <input type="text" id="player2" placeholder="선수 2">
+                        
+                        <h3 style="margin-top:20px">심판 정보</h3>
+                        <label>주심</label>
+                        <input type="text" id="main-referee" placeholder="주심 이름">
+                        <label>부심</label>
+                        <input type="text" id="assistant-referee" placeholder="부심 이름">
+                        
+                        <h3 style="margin-top:20px">코치 정보</h3>
+                        <label id="coach1-label">선수 1 코치</label>
+                        <input type="text" id="coach1" placeholder="코치 이름">
+                        <label id="coach2-label">선수 2 코치</label>
+                        <input type="text" id="coach2" placeholder="코치 이름">
+                        
+                        <div class="action-row">
+                            <button class="btn btn-danger" onclick="goTo('project-detail')">취소</button>
+                            <button class="btn btn-primary" onclick="createMatch()">경기 시작</button>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('match-type').onchange = (e) => {
+                    const isTeam = e.target.value === 'team';
+                    document.getElementById('sets-div').style.display = isTeam ? 'none' : 'block';
+                    document.getElementById('player1-label').textContent = isTeam ? '팀 1 이름 *' : '선수 1 이름 *';
+                    document.getElementById('player2-label').textContent = isTeam ? '팀 2 이름 *' : '선수 2 이름 *';
+                    document.getElementById('coach1-label').textContent = isTeam ? '팀 1 코치' : '선수 1 코치';
+                    document.getElementById('coach2-label').textContent = isTeam ? '팀 2 코치' : '선수 2 코치';
+                };
+            }
+            else if (screen === 'match') {
+                renderMatch();
+            }
+        }
+
+        function renderMatch() {
+            const set = currentMatch.setScores[currentMatch.currentSet - 1];
+            const canEnd = Math.max(set.player1, set.player2) >= currentMatch.winScore && 
+                          Math.abs(set.player1 - set.player2) >= 2;
+            
+            const player1Fouls = FOULS.map(f => 
+                `<button class="foul-btn" onclick="addScore('player1', 1, '${f.name}')">${f.name}<span style="font-size:12px">+1점</span></button>`
+            ).join('');
+            
+            const player2Fouls = FOULS.map(f => 
+                `<button class="foul-btn" onclick="addScore('player2', 1, '${f.name}')">${f.name}<span style="font-size:12px">+1점</span></button>`
+            ).join('');
+            
+            app.innerHTML = `
+                <div class="card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                        <div style="font-weight:600;">세트 ${currentMatch.currentSet}/${currentMatch.sets}</div>
+                        <div style="font-size:12px; color:var(--text-secondary)">주심: ${currentMatch.mainReferee || '미정'}</div>
+                    </div>
+                    
+                    ${canEnd ? '<div class="alert">✅ 세트 종료 조건 충족! 세트 종료 버튼을 눌러주세요.</div>' : ''}
+                    
+                    <div class="score-grid">
+                        <div class="player-score">
+                            <div class="player-name">${currentMatch.player1Name}</div>
+                            <div class="score-display">${set.player1}</div>
+                            ${currentMatch.currentServe === 'player1' ? `<div class="serve-indicator">🎾 서브 ${currentMatch.serveCount + 1}회차</div>` : ''}
+                        </div>
+                        <div style="font-size:24px; font-weight:700; color:var(--text-secondary)">VS</div>
+                        <div class="player-score">
+                            <div class="player-name">${currentMatch.player2Name}</div>
+                            <div class="score-display">${set.player2}</div>
+                            ${currentMatch.currentServe === 'player2' ? `<div class="serve-indicator">🎾 서브 ${currentMatch.serveCount + 1}회차</div>` : ''}
+                        </div>
+                    </div>
+                    
+                    <h3 style="margin-bottom:8px;">⏱️ 타임아웃</h3>
+                    <div class="timeout-section">
+                        <button class="timeout-btn" onclick="startTimeout('player1')" ${currentMatch.timeouts.player1 === 0 ? 'disabled' : ''}>
+                            ${currentMatch.player1Name} 타임아웃
+                            <span class="timeout-count">남은 횟수: ${currentMatch.timeouts.player1}</span>
+                        </button>
+                        <button class="timeout-btn" onclick="startTimeout('player2')" ${currentMatch.timeouts.player2 === 0 ? 'disabled' : ''}>
+                            ${currentMatch.player2Name} 타임아웃
+                            <span class="timeout-count">남은 횟수: ${currentMatch.timeouts.player2}</span>
+                        </button>
+                    </div>
+                    
+                    <h3 style="margin-top:24px; margin-bottom:12px;">${currentMatch.player1Name} 득점</h3>
+                    <button class="foul-btn goal-btn" onclick="addScore('player1', 2, '골')">⚫ 골 <span style="font-size:14px">+2점</span></button>
+                    <div class="foul-grid">${player1Fouls}</div>
+                    
+                    <h3 style="margin-top:24px; margin-bottom:12px;">${currentMatch.player2Name} 득점</h3>
+                    <button class="foul-btn goal-btn" onclick="addScore('player2', 2, '골')">⚫ 골 <span style="font-size:14px">+2점</span></button>
+                    <div class="foul-grid">${player2Fouls}</div>
+                    
+                    <div class="action-row">
+                        <button class="btn btn-danger" onclick="undo()" ${currentMatch.history.length === 0 ? 'disabled' : ''}>↩️ 취소</button>
+                        <button class="btn btn-success" onclick="endSet()">${currentMatch.currentSet < currentMatch.sets ? '세트 종료' : '경기 종료'}</button>
+                    </div>
+                    <button class="btn" onclick="goTo('project-detail')" style="margin-top:12px">← 경기 목록</button>
+                </div>
+                
+                ${currentMatch.history.length > 0 ? `
+                    <div class="card">
+                        <h2>경기 기록</h2>
+                        ${currentMatch.history.slice(0, 5).map(h => `
+                            <div style="padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:6px; display:flex; justify-content:space-between">
+                                <span>${h.time} - ${h.player}</span>
+                                <span style="font-weight:700">${h.type} +${h.points}점</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            `;
+        }
+
+        function goTo(s) {
+            screen = s;
+            render();
+        }
+
+        function createProject() {
+            const name = document.getElementById('project-name').value.trim();
+            if (!name) {
+                alert('프로젝트명을 입력해주세요');
+                return;
+            }
+            
+            const project = {
+                id: Date.now(),
+                name,
+                date: document.getElementById('project-date').value,
+                location: document.getElementById('project-location').value,
+                desc: document.getElementById('project-desc').value,
+                matches: [],
+                createdAt: new Date().toISOString()
+            };
+            
+            projects.push(project);
+            saveProjects();
+            goTo('project-list');
+        }
+
+        function selectProject(index) {
+            currentProject = projects[index];
+            goTo('project-detail');
+        }
+
+        function createMatch() {
+            const type = document.getElementById('match-type').value;
+            const player1 = document.getElementById('player1').value.trim();
+            const player2 = document.getElementById('player2').value.trim();
+            
+            if (!player1 || !player2) {
+                alert('선수 이름을 모두 입력해주세요');
+                return;
+            }
+
+            const sets = type === 'individual' ? parseInt(document.getElementById('sets').value) : 1;
+            const match = {
+                id: Date.now(),
+                type,
+                sets,
+                player1Name: player1,
+                player2Name: player2,
+                mainReferee: document.getElementById('main-referee').value.trim(),
+                assistantReferee: document.getElementById('assistant-referee').value.trim(),
+                coach1: document.getElementById('coach1').value.trim(),
+                coach2: document.getElementById('coach2').value.trim(),
+                winScore: type === 'individual' ? 11 : 31,
+                currentSet: 1,
+                setScores: [{player1: 0, player2: 0}],
+                currentServe: 'player1',
+                serveCount: 0,
+                timeouts: {
+                    player1: type === 'individual' ? sets : 2,
+                    player2: type === 'individual' ? sets : 2
+                },
+                status: 'active',
+                history: [],
+                createdAt: new Date().toISOString()
+            };
+            
+            currentProject.matches.push(match);
+            currentMatch = match;
+            saveProjects();
+            screen = 'match';
+            render();
+        }
+
+        function selectMatch(index) {
+            currentMatch = currentProject.matches[index];
+            screen = 'match';
+            render();
+        }
+
+        function addScore(player, points, type) {
+            const set = currentMatch.setScores[currentMatch.currentSet - 1];
+            if (player === 'player1') set.player1 += points;
+            else set.player2 += points;
+            
+            currentMatch.history.unshift({
+                time: new Date().toLocaleTimeString('ko-KR'),
+                player: player === 'player1' ? currentMatch.player1Name : currentMatch.player2Name,
+                type,
+                points,
+                set: currentMatch.currentSet
+            });
+            
+            currentMatch.serveCount++;
+            if (currentMatch.serveCount >= 2) {
+                currentMatch.currentServe = currentMatch.currentServe === 'player1' ? 'player2' : 'player1';
+                currentMatch.serveCount = 0;
+            }
+            
+            const score = player === 'player1' ? set.player1 : set.player2;
+            const playerName = player === 'player1' ? currentMatch.player1Name : currentMatch.player2Name;
+            
+            saveProjects();
+            renderMatch();
+            
+            // 세트 종료 조건 확인 및 자동 팝업
+            const diff = Math.abs(set.player1 - set.player2);
+            const max = Math.max(set.player1, set.player2);
+            if (max >= currentMatch.winScore && diff >= 2) {
+                setTimeout(() => {
+                    const setEndText = currentMatch.currentSet < currentMatch.sets 
+                        ? `세트 ${currentMatch.currentSet}을(를) 종료하시겠습니까?\n\n현재 점수: ${set.player1} - ${set.player2}`
+                        : `경기를 종료하시겠습니까?\n\n최종 점수: ${set.player1} - ${set.player2}`;
+                    
+                    if (confirm(setEndText)) {
+                        endSet();
+                    }
+                }, 500);
+            }
+        }
+
+        function undo() {
+            if (currentMatch.history.length === 0) return;
+            
+            const last = currentMatch.history.shift();
+            const set = currentMatch.setScores[currentMatch.currentSet - 1];
+            
+            if (last.player === currentMatch.player1Name) set.player1 -= last.points;
+            else set.player2 -= last.points;
+            
+            currentMatch.serveCount--;
+            if (currentMatch.serveCount < 0) {
+                currentMatch.currentServe = currentMatch.currentServe === 'player1' ? 'player2' : 'player1';
+                currentMatch.serveCount = 1;
+            }
+            
+            saveProjects();
+            renderMatch();
+        }
+
+        function endSet() {
+            const set = currentMatch.setScores[currentMatch.currentSet - 1];
+            const diff = Math.abs(set.player1 - set.player2);
+            const max = Math.max(set.player1, set.player2);
+            
+            if (max < currentMatch.winScore) {
+                alert(`${currentMatch.winScore}점 이상이어야 합니다`);
+                return;
+            }
+            if (diff < 2) {
+                alert('2점 이상 차이가 나야 합니다');
+                return;
+            }
+            
+            if (currentMatch.currentSet < currentMatch.sets) {
+                currentMatch.currentSet++;
+                currentMatch.setScores.push({player1: 0, player2: 0});
+                currentMatch.serveCount = 0;
+                // 개인전은 세트마다 타임아웃 리셋
+                if (currentMatch.type === 'individual') {
+                    currentMatch.timeouts = { player1: 1, player2: 1 };
+                }
+                saveProjects();
+                renderMatch();
+            } else {
+                if (confirm('경기를 종료하시겠습니까?')) {
+                    currentMatch.status = 'finished';
+                    currentMatch.finishedAt = new Date().toISOString();
+                    saveProjects();
+                    goTo('project-detail');
+                }
+            }
+        }
+
+        function startTimeout(player) {
+            if (currentMatch.timeouts[player] === 0) return;
+            
+            currentMatch.timeouts[player]--;
+            saveProjects();
+            
+            const playerName = player === 'player1' ? currentMatch.player1Name : currentMatch.player2Name;
+            document.getElementById('timeout-title').textContent = `${playerName} 타임아웃`;
+            document.getElementById('timeout-modal').classList.add('active');
+            
+            timeoutSeconds = 60;
+            updateTimerDisplay();
+            speak(`${playerName} 타임아웃 시작. 60초`);
+            
+            timeoutTimer = setInterval(() => {
+                timeoutSeconds--;
+                updateTimerDisplay();
+                
+                if (timeoutSeconds === 15) {
+                    speak('15초 남음');
+                    document.getElementById('timer-display').classList.add('warning');
+                } else if (timeoutSeconds === 0) {
+                    speak('타임아웃 종료');
+                    closeTimeout();
+                }
+            }, 1000);
+            
+            renderMatch();
+        }
+
+        function updateTimerDisplay() {
+            document.getElementById('timer-display').textContent = timeoutSeconds;
+        }
+
+        function closeTimeout() {
+            clearInterval(timeoutTimer);
+            document.getElementById('timeout-modal').classList.remove('active');
+            document.getElementById('timer-display').classList.remove('warning');
+            timeoutSeconds = 60;
+        }
+
+        function deleteMatch(event, index) {
+            event.stopPropagation();
+            const match = currentProject.matches[index];
+            const matchName = `${match.player1Name} vs ${match.player2Name}`;
+            
+            if (confirm(`경기를 삭제하시겠습니까?\n\n${matchName}\n세트 ${match.currentSet}/${match.sets}`)) {
+                currentProject.matches.splice(index, 1);
+                saveProjects();
+                render();
+            }
+        }
+
+        // 초기화
+        const savedTheme = localStorage.getItem('theme') || 'normal';
+        const savedThemeIndex = parseInt(localStorage.getItem('themeIndex')) || 0;
+        currentThemeIndex = savedThemeIndex;
+        
+        if (savedTheme !== 'normal') {
+            document.body.className = savedTheme;
+        }
+        
+        const currentTheme = themes[currentThemeIndex];
+        document.getElementById('theme-btn').textContent = `모드: ${currentTheme.name}`;
+        document.getElementById('voice-btn').style.opacity = voiceEnabled ? '1' : '0.5';
+        render();
+    </script>
+</body>
+</html>
