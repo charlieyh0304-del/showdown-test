@@ -476,14 +476,13 @@
             appId: "1:379033064628:web:252eef0e38b45859df73e1"
         };
         
-        // Firebase 앱 초기화
         let database = null;
         try {
             firebase.initializeApp(firebaseConfig);
             database = firebase.database();
-            console.log('✅ Firebase 실시간 동기화 활성화!');
+            console.log('✅ Firebase 연결됨');
         } catch (error) {
-            console.log('로컬 저장소 모드로 작동합니다.');
+            console.log('Firebase 연결 실패 - 로컬 모드');
         }
         
         // 음성 안내
@@ -961,6 +960,18 @@
 
         function renderMatch() {
             const app = document.getElementById('app');
+            
+            // currentMatch 확인
+            if (!currentMatch) {
+                app.innerHTML = `
+                    <div class="card">
+                        <h2>⚠️ 오류</h2>
+                        <p>경기 정보를 불러올 수 없습니다.</p>
+                        <button type="button" class="btn btn-primary" onclick="goTo('project-detail')">경기 목록으로</button>
+                    </div>
+                `;
+                return;
+            }
             
             // 완료된 경기는 기록만 표시
             if (currentMatch.status === 'finished') {
@@ -1464,14 +1475,13 @@
             const inputPin = prompt('🔐 심판 PIN을 입력하세요:');
             if (inputPin === currentMatch.refereePin) {
                 isAuthenticated = true;
-                alert('✅ 심판 인증 완료! 확인을 누르면 경기 화면으로 이동합니다.');
+                alert('✅ 심판 인증 완료!');
+                screen = 'match';
+                render();
             } else {
-                isAuthenticated = false;
-                alert('❌ PIN이 틀렸습니다. 관람 모드로 전환됩니다.');
+                alert('❌ PIN이 틀렸습니다. 경기에 진입할 수 없습니다.');
+                // 화면 전환 안 함 - 경기 목록에 머무름
             }
-            
-            screen = 'match';
-            render();
         }
 
         function addScore(player, points, type) {
