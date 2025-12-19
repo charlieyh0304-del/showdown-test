@@ -619,9 +619,7 @@
         ];
 
         function render() {
-            console.log('render() called, screen:', screen);
             const app = document.getElementById('app');
-            console.log('app element:', app);
             
             if (screen === 'home') {
                 app.innerHTML = `
@@ -940,8 +938,8 @@
                         </p>
                         
                         <div class="action-row">
-                            <button class="btn btn-danger" onclick="goTo('project-detail')">취소</button>
-                            <button class="btn btn-primary" onclick="createMatch()">경기 시작</button>
+                            <button type="button" class="btn btn-danger" onclick="goTo('project-detail')">취소</button>
+                            <button type="button" class="btn btn-primary" onclick="createMatch()">경기 시작</button>
                         </div>
                     </div>
                 `;
@@ -957,28 +955,20 @@
                 };
             }
             else if (screen === 'match') {
-                console.log('screen is match, calling renderMatch()');
-                console.log('currentMatch:', currentMatch);
                 renderMatch();
             }
         }
 
         function renderMatch() {
-            console.log('renderMatch() called');
             const app = document.getElementById('app');
-            console.log('app in renderMatch:', app);
             
             // 완료된 경기는 기록만 표시
             if (currentMatch.status === 'finished') {
-                console.log('match is finished');
                 renderFinishedMatch();
                 return;
             }
             
-            console.log('currentMatch.setScores:', currentMatch.setScores);
-            console.log('currentMatch.currentSet:', currentMatch.currentSet);
             const set = currentMatch.setScores[currentMatch.currentSet - 1];
-            console.log('current set:', set);
             const canEnd = Math.max(set.player1, set.player2) >= currentMatch.winScore && 
                           Math.abs(set.player1 - set.player2) >= 2;
             
@@ -1445,18 +1435,18 @@
                 localStorage.setItem('projects', JSON.stringify(projects));
             }
             
-            screen = 'match';
+            // 경기 생성 완료 후 경기 목록으로 이동
+            alert('✅ 경기가 생성되었습니다!');
+            screen = 'project-detail';
             render();
         }
 
         function selectMatch(index) {
-            console.log('selectMatch called, index:', index);
             currentMatch = currentProject.matches[index];
-            console.log('currentMatch:', currentMatch);
             
             // 완료된 경기는 인증 불필요
             if (currentMatch.status === 'finished') {
-                console.log('finished match');
+                isAuthenticated = false;
                 screen = 'match';
                 render();
                 return;
@@ -1464,7 +1454,6 @@
             
             // 관람 모드로 접속했으면 바로 보기
             if (userRole === 'viewer') {
-                console.log('viewer mode');
                 isAuthenticated = false;
                 screen = 'match';
                 render();
@@ -1472,22 +1461,17 @@
             }
             
             // 심판 모드 - PIN 확인
-            console.log('referee mode, asking PIN');
             const inputPin = prompt('🔐 심판 PIN을 입력하세요:');
-            console.log('PIN entered:', inputPin, 'expected:', currentMatch.refereePin);
             if (inputPin === currentMatch.refereePin) {
                 isAuthenticated = true;
-                alert('✅ 심판 인증 완료');
+                alert('✅ 심판 인증 완료! 확인을 누르면 경기 화면으로 이동합니다.');
             } else {
                 isAuthenticated = false;
                 alert('❌ PIN이 틀렸습니다. 관람 모드로 전환됩니다.');
             }
             
-            console.log('Setting screen to match');
             screen = 'match';
-            console.log('Calling render()');
             render();
-            console.log('render() completed');
         }
 
         function addScore(player, points, type) {
