@@ -545,7 +545,7 @@
         let isAuthenticated = false; // 심판 인증 여부
         
         // Firebase에서 프로젝트 로드
-        let isNavigating = false; // 화면 전환 중 플래그
+        let initialLoadDone = false;
         
         function loadProjects() {
             try {
@@ -561,8 +561,8 @@
                     projects = data ? Object.keys(data).map(key => ({...data[key], firebaseKey: key})) : [];
                     console.log('로드된 프로젝트:', projects.length);
                     
-                    // 현재 프로젝트/경기 업데이트
-                    if (currentProject) {
+                    // 현재 프로젝트/경기 업데이트 (데이터만 갱신, 화면은 건드리지 않음)
+                    if (currentProject && currentProject.firebaseKey) {
                         const updatedProject = projects.find(p => p.firebaseKey === currentProject.firebaseKey);
                         if (updatedProject) {
                             currentProject = updatedProject;
@@ -575,17 +575,16 @@
                         }
                     }
                     
-                    // 화면 전환 중이면 render 호출 안 함
-                    if (isNavigating) {
-                        return;
-                    }
-                    
-                    // match 화면이면 renderMatch만 호출
-                    if (screen === 'match' && currentMatch) {
-                        renderMatch();
-                    } else if (screen !== 'match') {
+                    // 최초 로드 시에만 render 호출
+                    if (!initialLoadDone) {
+                        initialLoadDone = true;
                         render();
                     }
+                    // 이후에는 match 화면일 때만 갱신 (실시간 점수 동기화용)
+                    else if (screen === 'match' && currentMatch) {
+                        renderMatch();
+                    }
+                    // 다른 화면에서는 자동 갱신 안 함
                 });
             } catch (error) {
                 console.log('Firebase 로드 실패 - 로컬 모드:', error);
@@ -1461,7 +1460,6 @@
         }
 
         function selectMatch(index) {
-            isNavigating = true; // Firebase 리스너 차단
             currentMatch = currentProject.matches[index];
             
             // 완료된 경기는 인증 불필요
@@ -1469,7 +1467,6 @@
                 isAuthenticated = false;
                 screen = 'match';
                 render();
-                isNavigating = false;
                 return;
             }
             
@@ -1478,7 +1475,6 @@
                 isAuthenticated = false;
                 screen = 'match';
                 render();
-                isNavigating = false;
                 return;
             }
             
@@ -1486,14 +1482,13 @@
             const inputPin = prompt('🔐 심판 PIN을 입력하세요:');
             if (inputPin === currentMatch.refereePin) {
                 isAuthenticated = true;
-                alert('✅ 심판 인증 완료!');
                 screen = 'match';
                 render();
+                alert('✅ 심판 인증 완료!');
             } else {
+                currentMatch = null;
                 alert('❌ PIN이 틀렸습니다. 경기에 진입할 수 없습니다.');
-                currentMatch = null; // 경기 선택 취소
             }
-            isNavigating = false;
         }
 
         function addScore(player, points, type) {
