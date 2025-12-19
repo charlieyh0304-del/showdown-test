@@ -545,6 +545,8 @@
         let isAuthenticated = false; // 심판 인증 여부
         
         // Firebase에서 프로젝트 로드
+        let isNavigating = false; // 화면 전환 중 플래그
+        
         function loadProjects() {
             try {
                 if (!database) {
@@ -573,10 +575,16 @@
                         }
                     }
                     
-                    if (screen !== 'match') {
-                        render();
-                    } else if (currentMatch) {
+                    // 화면 전환 중이면 render 호출 안 함
+                    if (isNavigating) {
+                        return;
+                    }
+                    
+                    // match 화면이면 renderMatch만 호출
+                    if (screen === 'match' && currentMatch) {
                         renderMatch();
+                    } else if (screen !== 'match') {
+                        render();
                     }
                 });
             } catch (error) {
@@ -1453,6 +1461,7 @@
         }
 
         function selectMatch(index) {
+            isNavigating = true; // Firebase 리스너 차단
             currentMatch = currentProject.matches[index];
             
             // 완료된 경기는 인증 불필요
@@ -1460,6 +1469,7 @@
                 isAuthenticated = false;
                 screen = 'match';
                 render();
+                isNavigating = false;
                 return;
             }
             
@@ -1468,6 +1478,7 @@
                 isAuthenticated = false;
                 screen = 'match';
                 render();
+                isNavigating = false;
                 return;
             }
             
@@ -1480,8 +1491,9 @@
                 render();
             } else {
                 alert('❌ PIN이 틀렸습니다. 경기에 진입할 수 없습니다.');
-                // 화면 전환 안 함 - 경기 목록에 머무름
+                currentMatch = null; // 경기 선택 취소
             }
+            isNavigating = false;
         }
 
         function addScore(player, points, type) {
