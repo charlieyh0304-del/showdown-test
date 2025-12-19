@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+                                                                        <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
@@ -545,8 +545,6 @@
         let isAuthenticated = false; // 심판 인증 여부
         
         // Firebase에서 프로젝트 로드
-        let initialLoadDone = false;
-        
         function loadProjects() {
             try {
                 if (!database) {
@@ -556,35 +554,13 @@
                     return;
                 }
                 console.log('Firebase에서 프로젝트 로드 중...');
-                database.ref('projects').on('value', (snapshot) => {
+                
+                // 한 번만 로드 (실시간 리스너 대신)
+                database.ref('projects').once('value').then((snapshot) => {
                     const data = snapshot.val();
                     projects = data ? Object.keys(data).map(key => ({...data[key], firebaseKey: key})) : [];
                     console.log('로드된 프로젝트:', projects.length);
-                    
-                    // 현재 프로젝트/경기 업데이트 (데이터만 갱신, 화면은 건드리지 않음)
-                    if (currentProject && currentProject.firebaseKey) {
-                        const updatedProject = projects.find(p => p.firebaseKey === currentProject.firebaseKey);
-                        if (updatedProject) {
-                            currentProject = updatedProject;
-                            if (currentMatch && currentProject.matches) {
-                                const matchIndex = currentProject.matches.findIndex(m => m.id === currentMatch.id);
-                                if (matchIndex >= 0) {
-                                    currentMatch = currentProject.matches[matchIndex];
-                                }
-                            }
-                        }
-                    }
-                    
-                    // 최초 로드 시에만 render 호출
-                    if (!initialLoadDone) {
-                        initialLoadDone = true;
-                        render();
-                    }
-                    // 이후에는 match 화면일 때만 갱신 (실시간 점수 동기화용)
-                    else if (screen === 'match' && currentMatch) {
-                        renderMatch();
-                    }
-                    // 다른 화면에서는 자동 갱신 안 함
+                    render();
                 });
             } catch (error) {
                 console.log('Firebase 로드 실패 - 로컬 모드:', error);
@@ -1482,12 +1458,12 @@
             const inputPin = prompt('🔐 심판 PIN을 입력하세요:');
             if (inputPin === currentMatch.refereePin) {
                 isAuthenticated = true;
+                alert('✅ 심판 인증 완료!');
                 screen = 'match';
                 render();
-                alert('✅ 심판 인증 완료!');
             } else {
-                currentMatch = null;
                 alert('❌ PIN이 틀렸습니다. 경기에 진입할 수 없습니다.');
+                // 화면 전환 안 함 - 경기 목록에 머무름
             }
         }
 
