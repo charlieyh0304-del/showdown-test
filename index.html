@@ -720,6 +720,12 @@
         }
 
         function renderMatch() {
+            // 완료된 경기는 기록만 표시
+            if (currentMatch.status === 'finished') {
+                renderFinishedMatch();
+                return;
+            }
+            
             const set = currentMatch.setScores[currentMatch.currentSet - 1];
             const canEnd = Math.max(set.player1, set.player2) >= currentMatch.winScore && 
                           Math.abs(set.player1 - set.player2) >= 2;
@@ -861,11 +867,91 @@
                                 <div style="padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:6px;">
                                     <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
                                         <span style="font-size:12px; color:var(--text-secondary);">${h.time} - ${h.server || h.player} 서브 ${h.serveNumber || ''}회차</span>
+                                        ${h.scoreBefore ? `<span style="font-size:12px; color:var(--text-secondary);">(${h.scoreBefore.player1}:${h.scoreBefore.player2})</span>` : ''}
                                     </div>
-                                    <div style="display:flex; justify-content:space-between;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center;">
                                         <span>${h.player} ${h.type}</span>
                                         <span style="font-weight:700; color:var(--primary);">+${h.points}점</span>
                                     </div>
+                                    ${h.scoreAfter ? `
+                                        <div style="margin-top:6px; padding-top:6px; border-top:1px solid var(--border);">
+                                            <span style="font-size:13px; font-weight:600; color:var(--success);">→ 스코어: ${h.scoreAfter.player1}:${h.scoreAfter.player2}</span>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+            `;
+        }
+
+        function renderFinishedMatch() {
+            // 세트별 점수 계산
+            const setResults = currentMatch.setScores.map((s, idx) => {
+                const winner = s.player1 > s.player2 ? currentMatch.player1Name : currentMatch.player2Name;
+                return `세트 ${idx + 1}: ${s.player1}-${s.player2} (${winner} 승)`;
+            }).join(' | ');
+            
+            // 최종 점수
+            const finalSet = currentMatch.setScores[currentMatch.setScores.length - 1];
+            const winner = currentMatch.setScores.filter((s, idx) => idx < currentMatch.setScores.length && s.player1 > s.player2).length > 
+                          currentMatch.setScores.filter((s, idx) => idx < currentMatch.setScores.length && s.player2 > s.player1).length 
+                          ? currentMatch.player1Name : currentMatch.player2Name;
+            
+            app.innerHTML = `
+                <div class="card">
+                    <div style="text-align:center; padding:16px; background:var(--success); color:white; border-radius:8px; margin-bottom:16px;">
+                        <h2 style="margin:0; color:white;">✅ 경기 종료</h2>
+                        <div style="font-size:18px; margin-top:8px;">승자: ${winner}</div>
+                    </div>
+                    
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                        <div style="font-weight:600;">경기 정보</div>
+                        <div style="font-size:12px; color:var(--text-secondary)">주심: ${currentMatch.mainReferee || '미정'}</div>
+                    </div>
+                    
+                    <div class="score-grid">
+                        <div class="player-score">
+                            <div class="player-name">${currentMatch.player1Name}</div>
+                            <div class="score-display">${finalSet.player1}</div>
+                            ${currentMatch.team1Lineup ? `<div style="font-size:12px; color:var(--text-secondary); margin-top:8px;">${currentMatch.team1Lineup.join(', ')}</div>` : ''}
+                        </div>
+                        <div style="font-size:24px; font-weight:700; color:var(--text-secondary)">VS</div>
+                        <div class="player-score">
+                            <div class="player-name">${currentMatch.player2Name}</div>
+                            <div class="score-display">${finalSet.player2}</div>
+                            ${currentMatch.team2Lineup ? `<div style="font-size:12px; color:var(--text-secondary); margin-top:8px;">${currentMatch.team2Lineup.join(', ')}</div>` : ''}
+                        </div>
+                    </div>
+                    
+                    <div style="padding:12px; background:var(--bg-secondary); border-radius:8px; margin-top:16px;">
+                        <div style="font-size:14px; font-weight:600; margin-bottom:8px;">세트별 결과</div>
+                        <div style="font-size:14px;">${setResults}</div>
+                    </div>
+                    
+                    <button class="btn btn-primary" onclick="goTo('project-detail')" style="margin-top:16px">← 경기 목록으로</button>
+                </div>
+                
+                ${currentMatch.history.length > 0 ? `
+                    <div class="card">
+                        <h2>전체 경기 기록</h2>
+                        <div id="match-history">
+                            ${currentMatch.history.map(h => `
+                                <div style="padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:6px;">
+                                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                                        <span style="font-size:12px; color:var(--text-secondary);">${h.time} - ${h.server || h.player} 서브 ${h.serveNumber || ''}회차</span>
+                                        ${h.scoreBefore ? `<span style="font-size:12px; color:var(--text-secondary);">(${h.scoreBefore.player1}:${h.scoreBefore.player2})</span>` : ''}
+                                    </div>
+                                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                                        <span>${h.player} ${h.type}</span>
+                                        <span style="font-weight:700; color:var(--primary);">+${h.points}점</span>
+                                    </div>
+                                    ${h.scoreAfter ? `
+                                        <div style="margin-top:6px; padding-top:6px; border-top:1px solid var(--border);">
+                                            <span style="font-size:13px; font-weight:600; color:var(--success);">→ 스코어: ${h.scoreAfter.player1}:${h.scoreAfter.player2}</span>
+                                        </div>
+                                    ` : ''}
                                 </div>
                             `).join('')}
                         </div>
@@ -979,8 +1065,14 @@
 
         function addScore(player, points, type) {
             const set = currentMatch.setScores[currentMatch.currentSet - 1];
+            // 득점 전 스코어 저장
+            const scoreBefore = { player1: set.player1, player2: set.player2 };
+            
             if (player === 'player1') set.player1 += points;
             else set.player2 += points;
+            
+            // 득점 후 스코어 저장
+            const scoreAfter = { player1: set.player1, player2: set.player2 };
             
             // 현재 서브 정보 저장
             const servingPlayer = currentMatch.currentServe === 'player1' ? currentMatch.player1Name : currentMatch.player2Name;
@@ -993,7 +1085,9 @@
                 points,
                 set: currentMatch.currentSet,
                 server: servingPlayer,
-                serveNumber: serveNumber
+                serveNumber: serveNumber,
+                scoreBefore: scoreBefore,
+                scoreAfter: scoreAfter
             });
             
             currentMatch.serveCount++;
