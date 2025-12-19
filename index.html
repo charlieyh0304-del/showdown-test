@@ -619,8 +619,9 @@
                                         </p>
                                     </div>
                                     <button onclick="deleteMatch(event, ${currentProject.matches.indexOf(m)})" 
-                                            style="position:absolute; top:12px; right:12px; min-width:40px; min-height:40px; padding:8px; background:var(--danger); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:600;">
-                                        🗑️
+                                            aria-label="${m.player1Name} vs ${m.player2Name} 경기 삭제"
+                                            style="position:absolute; top:12px; right:12px; min-width:auto; min-height:40px; padding:8px 12px; background:var(--danger); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:600; font-size:12px;">
+                                        ${m.player1Name} vs ${m.player2Name} 삭제
                                     </button>
                                 </div>
                             `).join('')}
@@ -637,8 +638,9 @@
                                         </p>
                                     </div>
                                     <button onclick="deleteMatch(event, ${currentProject.matches.indexOf(m)})" 
-                                            style="position:absolute; top:12px; right:12px; min-width:40px; min-height:40px; padding:8px; background:var(--danger); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:600;">
-                                        🗑️
+                                            aria-label="${m.player1Name} vs ${m.player2Name} 경기 삭제"
+                                            style="position:absolute; top:12px; right:12px; min-width:auto; min-height:40px; padding:8px 12px; background:var(--danger); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:600; font-size:12px;">
+                                        ${m.player1Name} vs ${m.player2Name} 삭제
                                     </button>
                                 </div>
                             `).join('')}
@@ -862,16 +864,30 @@
                 ${currentMatch.history.length > 0 ? `
                     <div class="card">
                         <h2>경기 기록</h2>
+                        <div style="margin-bottom:12px; display:flex; gap:8px;">
+                            <button class="btn" onclick="toggleHistoryOrder()" id="history-order-btn" style="font-size:12px; padding:6px 12px;">최신순 ↓</button>
+                        </div>
                         <div id="match-history">
-                            ${currentMatch.history.slice(0, 5).map(h => `
+                            ${currentMatch.history.slice(0, 5).map(h => {
+                                // 액션 설명 생성
+                                let actionDesc = '';
+                                if (h.type.includes('골')) {
+                                    actionDesc = `${h.player} 골`;
+                                } else {
+                                    // 파울: "홍길동 부정서브" 형태에서 파울한 사람과 파울 종류 추출
+                                    const foulType = h.type.split(' ').slice(1).join(' ');
+                                    actionDesc = `${h.actionPlayer || h.type.split(' ')[0]} ${foulType} (${h.player} 득점)`;
+                                }
+                                
+                                return `
                                 <div style="padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:6px;">
                                     <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
                                         <span style="font-size:12px; color:var(--text-secondary);">${h.time} - ${h.server || h.player} 서브 ${h.serveNumber || ''}회차</span>
                                         ${h.scoreBefore ? `<span style="font-size:12px; color:var(--text-secondary);">(${h.scoreBefore.player1}:${h.scoreBefore.player2})</span>` : ''}
                                     </div>
                                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                                        <span>${h.player} ${h.type}</span>
-                                        <span style="font-weight:700; color:var(--primary);">+${h.points}점</span>
+                                        <span>${actionDesc}</span>
+                                        <span style="font-weight:700; color:var(--primary);">${h.points}점 득점</span>
                                     </div>
                                     ${h.scoreAfter ? `
                                         <div style="margin-top:6px; padding-top:6px; border-top:1px solid var(--border);">
@@ -879,7 +895,7 @@
                                         </div>
                                     ` : ''}
                                 </div>
-                            `).join('')}
+                            `}).join('')}
                         </div>
                     </div>
                 ` : ''}
@@ -936,16 +952,38 @@
                 ${currentMatch.history.length > 0 ? `
                     <div class="card">
                         <h2>전체 경기 기록</h2>
-                        <div id="match-history">
-                            ${currentMatch.history.map(h => `
+                        <div style="margin-bottom:12px; display:flex; gap:8px;">
+                            <button class="btn" onclick="toggleFinishedHistoryOrder()" id="finished-history-order-btn" style="font-size:12px; padding:6px 12px;">최신순 ↓</button>
+                        </div>
+                        <div id="finished-match-history">
+                            ${currentMatch.history.map(h => {
+                                // 액션 설명 생성
+                                let actionDesc = '';
+                                if (h.type.includes('골')) {
+                                    actionDesc = `${h.player} 골`;
+                                } else {
+                                    // 파울: "홍길동 부정서브" 형태에서 파울한 사람과 파울 종류 추출
+                                    const foulType = h.type.split(' ').slice(1).join(' ');
+                                    actionDesc = `${h.actionPlayer || h.type.split(' ')[0]} ${foulType} (${h.player} 득점)`;
+                                }
+                                
+                                return `
                                 <div style="padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:6px;">
                                     <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
                                         <span style="font-size:12px; color:var(--text-secondary);">${h.time} - ${h.server || h.player} 서브 ${h.serveNumber || ''}회차</span>
                                         ${h.scoreBefore ? `<span style="font-size:12px; color:var(--text-secondary);">(${h.scoreBefore.player1}:${h.scoreBefore.player2})</span>` : ''}
                                     </div>
                                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                                        <span>${h.player} ${h.type}</span>
-                                        <span style="font-weight:700; color:var(--primary);">+${h.points}점</span>
+                                        <span>${actionDesc}</span>
+                                        <span style="font-weight:700; color:var(--primary);">${h.points}점 득점</span>
+                                    </div>
+                                    ${h.scoreAfter ? `
+                                        <div style="margin-top:6px; padding-top:6px; border-top:1px solid var(--border);">
+                                            <span style="font-size:13px; font-weight:600; color:var(--success);">→ 스코어: ${h.scoreAfter.player1}:${h.scoreAfter.player2}</span>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `}).join('')}
                                     </div>
                                     ${h.scoreAfter ? `
                                         <div style="margin-top:6px; padding-top:6px; border-top:1px solid var(--border);">
@@ -1080,7 +1118,8 @@
             
             currentMatch.history.unshift({
                 time: new Date().toLocaleTimeString('ko-KR'),
-                player: player === 'player1' ? currentMatch.player1Name : currentMatch.player2Name,
+                player: player === 'player1' ? currentMatch.player1Name : currentMatch.player2Name, // 득점한 선수
+                actionPlayer: type.includes('골') ? (player === 'player1' ? currentMatch.player1Name : currentMatch.player2Name) : type.split(' ')[0], // 액션한 선수 (골 또는 파울한 선수)
                 type,
                 points,
                 set: currentMatch.currentSet,
@@ -1305,6 +1344,30 @@
                 saveProjects();
                 render();
             }
+        }
+
+        // 경기 기록 순서 토글
+        let historyOrderDesc = true; // true: 최신순, false: 오래된순
+        let finishedHistoryOrderDesc = true;
+
+        function toggleHistoryOrder() {
+            historyOrderDesc = !historyOrderDesc;
+            const btn = document.getElementById('history-order-btn');
+            btn.textContent = historyOrderDesc ? '최신순 ↓' : '오래된순 ↑';
+            
+            const container = document.getElementById('match-history');
+            const items = Array.from(container.children);
+            items.reverse().forEach(item => container.appendChild(item));
+        }
+
+        function toggleFinishedHistoryOrder() {
+            finishedHistoryOrderDesc = !finishedHistoryOrderDesc;
+            const btn = document.getElementById('finished-history-order-btn');
+            btn.textContent = finishedHistoryOrderDesc ? '최신순 ↓' : '오래된순 ↑';
+            
+            const container = document.getElementById('finished-match-history');
+            const items = Array.from(container.children);
+            items.reverse().forEach(item => container.appendChild(item));
         }
 
         // 초기화
