@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="쇼다운 심판 앱 프로 - 프로젝트 관리, 심판 정보, 타임아웃 기능">
     <title>쇼다운 심판 앱 PRO</title>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -459,6 +465,29 @@
     </div>
 
     <script>
+        // Firebase 초기화
+        const firebaseConfig = {
+            apiKey: "AIzaSyAKv3QOpSg-hLnyXSnE299fHRV-akpPQCs",
+            authDomain: "showdown1-838bf.firebaseapp.com",
+            databaseURL: "https://showdown1-838bf-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "showdown1-838bf",
+            storageBucket: "showdown1-838bf.firebasestorage.app",
+            messagingSenderId: "379033064628",
+            appId: "1:379033064628:web:252eef0e38b45859df73e1"
+        };
+        
+        // Firebase 앱 초기화
+        let database = null;
+        try {
+            firebase.initializeApp(firebaseConfig);
+            database = firebase.database();
+            console.log('✅ Firebase 실시간 동기화 활성화!');
+            console.log('Database URL:', firebaseConfig.databaseURL);
+        } catch (error) {
+            console.error('❌ Firebase 초기화 실패:', error);
+            console.log('로컬 저장소 모드로 작동합니다.');
+        }
+        
         // 음성 안내
         let voiceEnabled = localStorage.getItem('voice') !== 'false';
         let isTimeoutActive = false;
@@ -510,16 +539,76 @@
         }
 
         // 데이터 구조
-        let projects = JSON.parse(localStorage.getItem('projects') || '[]');
+        let projects = [];
         let currentProject = null;
         let currentMatch = null;
         let screen = 'home';
         let timeoutTimer = null;
         let timeoutSeconds = 60;
-
-        function saveProjects() {
-            localStorage.setItem('projects', JSON.stringify(projects));
+        let isAuthenticated = false; // 심판 인증 여부
+        
+        // Firebase에서 프로젝트 로드
+        function loadProjects() {
+            try {
+                if (!database) {
+                    console.log('Firebase 미연결 - 로컬 모드');
+                    projects = JSON.parse(localStorage.getItem('projects') || '[]');
+                    render();
+                    return;
+                }
+                console.log('Firebase에서 프로젝트 로드 중...');
+                database.ref('projects').on('value', (snapshot) => {
+                    const data = snapshot.val();
+                    projects = data ? Object.keys(data).map(key => ({...data[key], firebaseKey: key})) : [];
+                    console.log('로드된 프로젝트:', projects.length);
+                    
+                    // 현재 프로젝트/경기 업데이트
+                    if (currentProject) {
+                        const updatedProject = projects.find(p => p.firebaseKey === currentProject.firebaseKey);
+                        if (updatedProject) {
+                            currentProject = updatedProject;
+                            if (currentMatch && currentProject.matches) {
+                                const matchIndex = currentProject.matches.findIndex(m => m.id === currentMatch.id);
+                                if (matchIndex >= 0) {
+                                    currentMatch = currentProject.matches[matchIndex];
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (screen !== 'match') {
+                        render();
+                    } else if (currentMatch) {
+                        renderMatch();
+                    }
+                });
+            } catch (error) {
+                console.log('Firebase 로드 실패 - 로컬 모드:', error);
+                projects = JSON.parse(localStorage.getItem('projects') || '[]');
+                render();
+            }
         }
+        
+        // Firebase에 프로젝트 저장
+        function saveProjects() {
+            try {
+                if (database && currentProject && currentProject.firebaseKey) {
+                    database.ref('projects/' + currentProject.firebaseKey).set(currentProject);
+                    console.log('✅ Firebase 저장 완료');
+                } else {
+                    // 로컬 저장
+                    localStorage.setItem('projects', JSON.stringify(projects));
+                    console.log('✅ 로컬 저장 완료');
+                }
+            } catch (error) {
+                console.error('저장 에러:', error);
+                localStorage.setItem('projects', JSON.stringify(projects));
+            }
+        }
+        
+        // 초기 로드
+        setTimeout(() => loadProjects(), 1000);
+
 
         const FOULS = [
             { id: 'irregular-serve', name: '부정 서브', points: 1 },
@@ -538,12 +627,53 @@
                 app.innerHTML = `
                     <div class="header">
                         <h1>⚫ 쇼다운 심판 앱 PRO</h1>
-                        <p>프로젝트 관리 · 심판 정보 · 타임아웃 기능</p>
+                        <p>실시간 동기화 · 심판/관람 모드</p>
+                    </div>
+                    <div class="card">
+                        <h2>모드 선택</h2>
+                        <p style="color:var(--text-secondary); margin-bottom:16px;">사용 목적에 맞는 모드를 선택하세요</p>
+                        <button class="btn btn-primary" onclick="selectRole('referee')" style="background:var(--success); margin-bottom:12px;">
+                            🔐 심판 모드
+                        </button>
+                        <p style="font-size:14px; color:var(--text-secondary); margin-bottom:20px;">
+                            프로젝트 생성, 경기 관리, 득점 입력
+                        </p>
+                        <button class="btn btn-primary" onclick="selectRole('viewer')" style="background:var(--primary);">
+                            👁️ 관람 모드
+                        </button>
+                        <p style="font-size:14px; color:var(--text-secondary); margin-top:8px;">
+                            실시간 점수 확인, 경기 기록 보기
+                        </p>
+                    </div>
+                `;
+            }
+            else if (screen === 'referee-home') {
+                app.innerHTML = `
+                    <div class="header">
+                        <h1>🔐 심판 모드</h1>
+                        <p>프로젝트 관리 · 득점 입력</p>
                     </div>
                     <div class="card">
                         <h2>프로젝트 관리</h2>
                         <button class="btn btn-primary" onclick="goTo('create-project')">📁 새 프로젝트 생성</button>
                         <button class="btn btn-primary" onclick="goTo('project-list')">📂 프로젝트 목록</button>
+                        <button class="btn" onclick="goTo('home')" style="margin-top:16px;">← 모드 선택으로</button>
+                    </div>
+                `;
+            }
+            else if (screen === 'viewer-home') {
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <h1>👁️ 관람 모드</h1>
+                        <p>실시간 점수 확인</p>
+                    </div>
+                    <div class="card">
+                        <div style="background:#fff3cd; border-left:4px solid #fbbc04; padding:12px; border-radius:8px; margin-bottom:16px;">
+                            <strong>📺 관람 전용</strong><br>
+                            <span style="font-size:14px;">점수 확인만 가능합니다. 득점 입력은 심판 모드에서만 가능합니다.</span>
+                        </div>
+                        <button class="btn btn-primary" onclick="goTo('project-list')">📂 프로젝트 목록 보기</button>
+                        <button class="btn" onclick="goTo('home')" style="margin-top:16px;">← 모드 선택으로</button>
                     </div>
                 `;
             }
@@ -570,18 +700,23 @@
                 app.innerHTML = `
                     <div class="card">
                         <h2>프로젝트 목록</h2>
+                        ${userRole === 'viewer' ? `
+                            <div style="background:#e3f2fd; padding:12px; border-radius:8px; margin-bottom:16px;">
+                                <span style="color:#1565c0;">👁️ 관람 모드 - 프로젝트를 선택하여 경기를 확인하세요</span>
+                            </div>
+                        ` : ''}
                         ${projects.length === 0 ? 
                             '<p style="text-align:center; padding:40px; color:var(--text-secondary)">생성된 프로젝트가 없습니다.</p>' :
                             projects.map((p, i) => `
                                 <div class="folder-item" onclick="selectProject(${i})">
                                     <h4>📁 ${p.name}</h4>
                                     <p style="color:var(--text-secondary); font-size:14px; margin-top:4px">
-                                        ${p.date || '날짜 미정'} · ${p.location || '장소 미정'} · 경기 ${p.matches.length}개
+                                        ${p.date || '날짜 미정'} · ${p.location || '장소 미정'} · 경기 ${p.matches?.length || 0}개
                                     </p>
                                 </div>
                             `).join('')
                         }
-                        <button class="btn btn-primary" onclick="goTo('home')" style="margin-top:12px">🏠 홈으로</button>
+                        <button class="btn btn-primary" onclick="goTo('${userRole === 'referee' ? 'referee-home' : 'viewer-home'}')" style="margin-top:12px">← 뒤로</button>
                     </div>
                 `;
             }
@@ -605,8 +740,12 @@
                         ${currentProject.desc ? `<p style="margin-top:12px; color:var(--text-secondary)">${currentProject.desc}</p>` : ''}
                     </div>
                     <div class="card">
-                        <h2>경기 관리</h2>
-                        <button class="btn btn-primary" onclick="goTo('create-match')">➕ 새 경기 생성</button>
+                        <h2>경기 ${userRole === 'viewer' ? '목록' : '관리'}</h2>
+                        ${userRole === 'referee' ? `<button class="btn btn-primary" onclick="goTo('create-match')">➕ 새 경기 생성</button>` : `
+                            <div style="background:#e8f5e9; padding:12px; border-radius:8px; margin-bottom:16px;">
+                                <span style="color:#2e7d32;">👁️ 관람 모드 - 경기를 선택하여 점수를 확인하세요</span>
+                            </div>
+                        `}
                         
                         ${active.length > 0 ? `
                             <h3 style="color:var(--success); margin:16px 0">진행 중인 경기</h3>
@@ -615,14 +754,16 @@
                                     <div onclick="selectMatch(${currentProject.matches.indexOf(m)})" style="cursor:pointer">
                                         <h4>${m.player1Name} vs ${m.player2Name}</h4>
                                         <p style="color:var(--text-secondary); font-size:14px; margin-top:4px">
-                                            세트 ${m.currentSet}/${m.sets} · 주심: ${m.mainReferee || '미정'}
+                                            세트 ${m.currentSet}/${m.sets} · ${m.setScores[m.currentSet - 1].player1}-${m.setScores[m.currentSet - 1].player2} · 주심: ${m.mainReferee || '미정'}
                                         </p>
                                     </div>
-                                    <button onclick="deleteMatch(event, ${currentProject.matches.indexOf(m)})" 
-                                            aria-label="${m.player1Name} vs ${m.player2Name} 경기 삭제"
-                                            style="position:absolute; top:12px; right:12px; min-width:auto; min-height:40px; padding:8px 12px; background:var(--danger); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:600; font-size:12px;">
-                                        ${m.player1Name} vs ${m.player2Name} 삭제
-                                    </button>
+                                    ${userRole === 'referee' ? `
+                                        <button onclick="deleteMatch(event, ${currentProject.matches.indexOf(m)})" 
+                                                aria-label="${m.player1Name} vs ${m.player2Name} 경기 삭제"
+                                                style="position:absolute; top:12px; right:12px; min-width:auto; min-height:40px; padding:8px 12px; background:var(--danger); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:600; font-size:12px;">
+                                            ${m.player1Name} vs ${m.player2Name} 삭제
+                                        </button>
+                                    ` : ''}
                                 </div>
                             `).join('')}
                         ` : ''}
@@ -637,11 +778,13 @@
                                             완료 · 주심: ${m.mainReferee || '미정'}
                                         </p>
                                     </div>
-                                    <button onclick="deleteMatch(event, ${currentProject.matches.indexOf(m)})" 
-                                            aria-label="${m.player1Name} vs ${m.player2Name} 경기 삭제"
-                                            style="position:absolute; top:12px; right:12px; min-width:auto; min-height:40px; padding:8px 12px; background:var(--danger); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:600; font-size:12px;">
-                                        ${m.player1Name} vs ${m.player2Name} 삭제
-                                    </button>
+                                    ${userRole === 'referee' ? `
+                                        <button onclick="deleteMatch(event, ${currentProject.matches.indexOf(m)})" 
+                                                aria-label="${m.player1Name} vs ${m.player2Name} 경기 삭제"
+                                                style="position:absolute; top:12px; right:12px; min-width:auto; min-height:40px; padding:8px 12px; background:var(--danger); color:white; border:none; border-radius:6px; cursor:pointer; font-weight:600; font-size:12px;">
+                                            ${m.player1Name} vs ${m.player2Name} 삭제
+                                        </button>
+                                    ` : ''}
                                 </div>
                             `).join('')}
                         ` : ''}
@@ -699,6 +842,13 @@
                         <label id="coach2-label">선수 2 코치</label>
                         <input type="text" id="coach2" placeholder="코치 이름">
                         
+                        <h3 style="margin-top:20px">🔐 보안 설정</h3>
+                        <label>심판 PIN (6자리 이상) *</label>
+                        <input type="password" id="referee-pin" placeholder="6자리 이상 숫자" maxlength="8" pattern="[0-9]{6,8}">
+                        <p style="font-size:12px; color:var(--text-secondary); margin-top:4px;">
+                            ⚠️ 득점 입력 시 필요합니다. 잊지 마세요!
+                        </p>
+                        
                         <div class="action-row">
                             <button class="btn btn-danger" onclick="goTo('project-detail')">취소</button>
                             <button class="btn btn-primary" onclick="createMatch()">경기 시작</button>
@@ -736,7 +886,13 @@
                 <div class="card">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
                         <div style="font-weight:600;">세트 ${currentMatch.currentSet}/${currentMatch.sets}</div>
-                        <div style="font-size:12px; color:var(--text-secondary)">주심: ${currentMatch.mainReferee || '미정'}</div>
+                        <div style="display:flex; gap:12px; align-items:center;">
+                            ${isAuthenticated ? 
+                                '<span style="background:var(--success); color:white; padding:4px 12px; border-radius:12px; font-size:12px; font-weight:600;">🔓 심판 모드</span>' : 
+                                '<span style="background:var(--warning); color:white; padding:4px 12px; border-radius:12px; font-size:12px; font-weight:600;">👁️ 관람 모드</span>'
+                            }
+                            <div style="font-size:12px; color:var(--text-secondary)">주심: ${currentMatch.mainReferee || '미정'}</div>
+                        </div>
                     </div>
                     
                     <div class="score-grid">
@@ -990,6 +1146,20 @@
             `;
         }
 
+        let userRole = null; // 'referee' 또는 'viewer'
+        
+        function selectRole(role) {
+            userRole = role;
+            if (role === 'referee') {
+                isAuthenticated = true; // 심판 모드는 인증됨
+                screen = 'referee-home';
+            } else {
+                isAuthenticated = false; // 관람 모드는 인증 안 됨
+                screen = 'viewer-home';
+            }
+            render();
+        }
+
         function goTo(s) {
             screen = s;
             render();
@@ -1012,9 +1182,38 @@
                 createdAt: new Date().toISOString()
             };
             
-            projects.push(project);
-            saveProjects();
-            goTo('project-list');
+            console.log('프로젝트 생성 시도:', project);
+            
+            // Firebase에 저장
+            try {
+                if (typeof database !== 'undefined' && database) {
+                    console.log('Firebase에 저장 중...');
+                    const newProjectRef = database.ref('projects').push();
+                    project.firebaseKey = newProjectRef.key;
+                    newProjectRef.set(project).then(() => {
+                        console.log('✅ Firebase 저장 성공!');
+                        goTo('project-list');
+                    }).catch((error) => {
+                        console.error('Firebase 저장 에러:', error);
+                        alert('Firebase 저장 실패. 로컬 저장으로 전환합니다.');
+                        projects.push(project);
+                        localStorage.setItem('projects', JSON.stringify(projects));
+                        goTo('project-list');
+                    });
+                } else {
+                    // 로컬 저장
+                    console.log('로컬 저장 모드');
+                    projects.push(project);
+                    localStorage.setItem('projects', JSON.stringify(projects));
+                    goTo('project-list');
+                }
+            } catch (error) {
+                console.error('프로젝트 생성 에러:', error);
+                alert('에러: ' + error.message);
+                projects.push(project);
+                localStorage.setItem('projects', JSON.stringify(projects));
+                goTo('project-list');
+            }
         }
 
         function selectProject(index) {
@@ -1029,6 +1228,13 @@
             
             if (!player1 || !player2) {
                 alert('팀 이름을 모두 입력해주세요');
+                return;
+            }
+            
+            // PIN 확인
+            const pin = document.getElementById('referee-pin').value.trim();
+            if (!pin || pin.length < 6 || !/^\d+$/.test(pin)) {
+                alert('심판 PIN을 6자리 이상 숫자로 입력해주세요');
                 return;
             }
             
@@ -1065,6 +1271,7 @@
                 assistantReferee: document.getElementById('assistant-referee').value.trim(),
                 coach1: document.getElementById('coach1').value.trim(),
                 coach2: document.getElementById('coach2').value.trim(),
+                refereePin: pin, // 심판 PIN 저장
                 winScore: type === 'individual' ? 11 : 31,
                 currentSet: 1,
                 setScores: [{player1: 0, player2: 0}],
@@ -1082,6 +1289,7 @@
             
             currentProject.matches.push(match);
             currentMatch = match;
+            isAuthenticated = true; // 경기 생성한 심판은 자동 인증
             saveProjects();
             screen = 'match';
             render();
@@ -1089,11 +1297,43 @@
 
         function selectMatch(index) {
             currentMatch = currentProject.matches[index];
+            
+            // 완료된 경기는 인증 불필요
+            if (currentMatch.status === 'finished') {
+                screen = 'match';
+                render();
+                return;
+            }
+            
+            // 관람 모드로 접속했으면 바로 보기
+            if (userRole === 'viewer') {
+                isAuthenticated = false;
+                screen = 'match';
+                render();
+                return;
+            }
+            
+            // 심판 모드 - PIN 확인
+            const inputPin = prompt('🔐 심판 PIN을 입력하세요:');
+            if (inputPin === currentMatch.refereePin) {
+                isAuthenticated = true;
+                alert('✅ 심판 인증 완료');
+            } else {
+                isAuthenticated = false;
+                alert('❌ PIN이 틀렸습니다. 관람 모드로 전환됩니다.');
+            }
+            
             screen = 'match';
             render();
         }
 
         function addScore(player, points, type) {
+            // 인증 확인
+            if (!isAuthenticated) {
+                alert('❌ 심판만 득점을 입력할 수 있습니다');
+                return;
+            }
+            
             const set = currentMatch.setScores[currentMatch.currentSet - 1];
             // 득점 전 스코어 저장
             const scoreBefore = { player1: set.player1, player2: set.player2 };
@@ -1185,7 +1425,12 @@
             }
         }
 
+
         function undo() {
+            if (!isAuthenticated) {
+                alert('❌ 심판만 취소할 수 있습니다');
+                return;
+            }
             if (currentMatch.history.length === 0) return;
             
             const last = currentMatch.history.shift();
@@ -1210,6 +1455,10 @@
         }
 
         function endSet() {
+            if (!isAuthenticated) {
+                alert('❌ 심판만 세트를 종료할 수 있습니다');
+                return;
+            }
             const set = currentMatch.setScores[currentMatch.currentSet - 1];
             const diff = Math.abs(set.player1 - set.player2);
             const max = Math.max(set.player1, set.player2);
@@ -1251,6 +1500,12 @@
 
         function startTimeout(player) {
             if (currentMatch.timeouts[player] === 0 || isTimeoutActive) return;
+            
+            // 인증 확인
+            if (!isAuthenticated) {
+                alert('❌ 심판만 타임아웃을 시작할 수 있습니다');
+                return;
+            }
             
             isTimeoutActive = true;
             currentMatch.timeouts[player]--;
