@@ -589,39 +589,17 @@
                 }
                 console.log('Firebase에서 프로젝트 로드 중...');
                 
-                let isFirstLoad = true;
-                database.ref('projects').on('value', (snapshot) => {
+                // 한 번만 로드 (실시간 리스너 사용 안 함)
+                database.ref('projects').once('value').then((snapshot) => {
                     const data = snapshot.val();
                     projects = data ? Object.keys(data).map(key => ({...data[key], firebaseKey: key})) : [];
                     console.log('로드된 프로젝트:', projects.length);
-                    
-                    // 첫 로드시 URL 파라미터 확인
-                    if (isFirstLoad) {
-                        isFirstLoad = false;
-                        checkUrlProjectParam();
-                    }
-                    
-                    // 현재 프로젝트/경기 데이터 갱신
-                    if (currentProject && currentProject.firebaseKey) {
-                        const updatedProject = projects.find(p => p.firebaseKey === currentProject.firebaseKey);
-                        if (updatedProject) {
-                            currentProject = updatedProject;
-                            if (currentMatch && currentProject.matches) {
-                                const matchIndex = currentProject.matches.findIndex(m => m.id === currentMatch.id);
-                                if (matchIndex >= 0) {
-                                    currentMatch = currentProject.matches[matchIndex];
-                                }
-                            }
-                        }
-                    }
-                    
-                    // 사용자 액션 중이면 렌더링 안 함
-                    if (isUserAction) {
-                        return;
-                    }
-                    
-                    // Firebase 자동 렌더링 비활성화 (경기 진입 버그 방지)
-                    // 화면 갱신은 수동으로만 진행
+                    checkUrlProjectParam();
+                    render();
+                }).catch(error => {
+                    console.log('Firebase 로드 실패:', error);
+                    projects = JSON.parse(localStorage.getItem('projects') || '[]');
+                    render();
                 });
             } catch (error) {
                 console.log('Firebase 로드 실패 - 로컬 모드:', error);
