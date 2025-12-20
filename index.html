@@ -578,6 +578,8 @@
         // Firebase에서 프로젝트 로드
         let isUserAction = false; // 사용자 액션 중 플래그
         
+        let matchSelectionInProgress = false; // 경기 선택 중 플래그
+        
         function loadProjects() {
             try {
                 if (!database) {
@@ -589,16 +591,36 @@
                 }
                 console.log('Firebase에서 프로젝트 로드 중...');
                 
-                // 한 번만 로드 (실시간 리스너 사용 안 함)
-                database.ref('projects').once('value').then((snapshot) => {
+                let isFirstLoad = true;
+                database.ref('projects').on('value', (snapshot) => {
                     const data = snapshot.val();
                     projects = data ? Object.keys(data).map(key => ({...data[key], firebaseKey: key})) : [];
                     console.log('로드된 프로젝트:', projects.length);
-                    checkUrlProjectParam();
-                    render();
-                }).catch(error => {
-                    console.log('Firebase 로드 실패:', error);
-                    projects = JSON.parse(localStorage.getItem('projects') || '[]');
+                    
+                    // 첫 로드시 URL 파라미터 확인
+                    if (isFirstLoad) {
+                        isFirstLoad = false;
+                        checkUrlProjectParam();
+                        render();
+                        return;
+                    }
+                    
+                    // 경기 선택 중이면 렌더링 안 함
+                    if (matchSelectionInProgress || isUserAction) {
+                        return;
+                    }
+                    
+                    // match 화면이면 무시
+                    if (screen === 'match') {
+                        return;
+                    }
+                    
+                    // project-detail 화면도 무시 (경기 진입 방해 방지)
+                    if (screen === 'project-detail') {
+                        return;
+                    }
+                    
+                    // 나머지 화면만 자동 갱신
                     render();
                 });
             } catch (error) {
@@ -2781,7 +2803,8 @@
         }
 
         function selectMatch(index) {
-            isUserAction = true; // Firebase 리스너 차단
+            matchSelectionInProgress = true; // 경기 선택 시작
+            isUserAction = true;
             currentMatch = currentProject.matches[index];
             
             // 완료된 경기는 인증 불필요
@@ -2789,7 +2812,7 @@
                 isAuthenticated = false;
                 screen = 'match';
                 render();
-                setTimeout(() => { isUserAction = false; }, 3000);
+                setTimeout(() => { matchSelectionInProgress = false; isUserAction = false; }, 1000);
                 return;
             }
             
@@ -2798,27 +2821,23 @@
                 isAuthenticated = false;
                 screen = 'match';
                 render();
-                setTimeout(() => { isUserAction = false; }, 3000);
+                setTimeout(() => { matchSelectionInProgress = false; isUserAction = false; }, 1000);
                 return;
             }
             
-            // 심판 모드 - 먼저 screen을 match로 설정 (Firebase 리스너 방어)
-            screen = 'match';
-            
-            // PIN 확인
+            // 심판 모드 - PIN 확인
             const inputPin = prompt('🔐 심판 PIN을 입력하세요:');
             
             if (inputPin === currentMatch.refereePin) {
                 isAuthenticated = true;
+                screen = 'match';
                 render();
-                setTimeout(() => { isUserAction = false; }, 3000);
+                setTimeout(() => { matchSelectionInProgress = false; isUserAction = false; }, 1000);
             } else {
-                // 실패하면 원래 화면으로
                 screen = 'project-detail';
-                isAuthenticated = false;
                 alert('❌ PIN이 틀렸습니다.');
-                render();
-                setTimeout(() => { isUserAction = false; }, 500);
+                matchSelectionInProgress = false;
+                isUserAction = false;
             }
         }
 
