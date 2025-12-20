@@ -2817,7 +2817,7 @@
                 isAuthenticated = false;
                 screen = 'match';
                 render();
-                setTimeout(() => { isUserAction = false; }, 500);
+                setTimeout(() => { isUserAction = false; }, 2000);
                 return;
             }
             
@@ -2826,22 +2826,23 @@
                 isAuthenticated = false;
                 screen = 'match';
                 render();
-                setTimeout(() => { isUserAction = false; }, 500);
+                setTimeout(() => { isUserAction = false; }, 2000);
                 return;
             }
             
             // 심판 모드 - PIN 확인
             const inputPin = prompt('🔐 심판 PIN을 입력하세요:');
+            
             if (inputPin === currentMatch.refereePin) {
                 isAuthenticated = true;
-                alert('✅ 심판 인증 완료!');
                 screen = 'match';
-                render();
+                // 즉시 렌더링하고 2초간 Firebase 차단
+                setTimeout(() => { render(); }, 10);
+                setTimeout(() => { isUserAction = false; }, 2000);
             } else {
                 alert('❌ PIN이 틀렸습니다. 경기에 진입할 수 없습니다.');
-                // 화면 전환 안 함 - 경기 목록에 머무름
+                isUserAction = false;
             }
-            setTimeout(() => { isUserAction = false; }, 500);
         }
 
         function addScore(player, points, type) {
