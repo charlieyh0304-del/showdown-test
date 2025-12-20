@@ -2,9 +2,29 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="쇼다운 심판 앱 프로 - 프로젝트 관리, 심판 정보, 타임아웃 기능">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="쇼다운 심판 앱 프로 - 대진 설정, 심판 관리, 실시간 점수">
+    <meta name="theme-color" content="#4a90d9">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="쇼다운">
     <title>쇼다운 심판 앱 PRO</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="icons/icon-152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" sizes="167x167" href="icons/icon-152.png">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-72.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/icon-72.png">
+    
+    <!-- Splash Screen for iOS -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="apple-touch-startup-image" href="icons/icon-512.png">
     
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -466,6 +486,22 @@
         </div>
     </div>
 
+    <!-- PIN 입력 모달 -->
+    <div id="pin-modal" class="modal">
+        <div class="modal-content" style="max-width:320px;">
+            <h2 style="text-align:center;">🔐 심판 PIN 입력</h2>
+            <p style="text-align:center; color:#666; font-size:14px; margin-bottom:16px;">경기 관리를 위해 PIN을 입력하세요</p>
+            <input type="password" id="pin-input" placeholder="PIN 입력" 
+                   style="width:100%; padding:16px; font-size:20px; text-align:center; border:2px solid #ddd; border-radius:8px; letter-spacing:4px;"
+                   maxlength="8" inputmode="numeric">
+            <div id="pin-error" style="color:#f44336; text-align:center; margin-top:8px; display:none;">PIN이 틀렸습니다</div>
+            <div style="display:flex; gap:8px; margin-top:16px;">
+                <button class="btn" onclick="closePinModal()" style="flex:1;">취소</button>
+                <button class="btn btn-primary" onclick="verifyPin()" style="flex:1;">확인</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Firebase 초기화
         const firebaseConfig = {
@@ -546,6 +582,9 @@
         let timeoutSeconds = 60;
         let isAuthenticated = false; // 심판 인증 여부
         let isPaused = false; // 경기 일시정지 상태
+        let warmupActive = false; // 워밍업 진행 상태
+        let warmupSeconds = 60; // 워밍업 남은 시간
+        let warmupTimer = null; // 워밍업 타이머
         let pauseTimer = null; // 일시정지 타이머
         let pauseSeconds = 0; // 일시정지 경과 시간
         let isOffline = !navigator.onLine; // 오프라인 상태
@@ -724,17 +763,26 @@
                     ${offlineIndicator}
                     <div class="header">
                         <h1>⚫ 쇼다운 심판 앱 PRO</h1>
-                        <p>실시간 동기화 · 심판/관람 모드</p>
+                        <p>대진 설정 · 심판 · 관람</p>
                     </div>
                     <div class="card">
                         <h2>모드 선택</h2>
                         <p style="color:var(--text-secondary); margin-bottom:16px;">사용 목적에 맞는 모드를 선택하세요</p>
-                        <button type="button" role="button" class="btn btn-primary" onclick="selectRole('referee')" style="background:var(--success); margin-bottom:12px;" aria-label="심판 모드 선택 - 프로젝트 생성, 경기 관리, 득점 입력">
+                        
+                        <button type="button" role="button" class="btn btn-primary" onclick="enterBracketMode()" style="background:linear-gradient(135deg, #1976d2 0%, #0d47a1 100%); margin-bottom:8px;" aria-label="대진 설정 모드 - 대회 생성, 조편성, 토너먼트">
+                            🏆 대진 설정
+                        </button>
+                        <p style="font-size:14px; color:var(--text-secondary); margin-bottom:20px;">
+                            대회 생성, 조편성, 토너먼트 (운영자용)
+                        </p>
+                        
+                        <button type="button" role="button" class="btn btn-primary" onclick="selectRole('referee')" style="background:var(--success); margin-bottom:8px;" aria-label="심판 모드 선택 - 경기 진행, 득점 입력">
                             🔐 심판 모드
                         </button>
                         <p style="font-size:14px; color:var(--text-secondary); margin-bottom:20px;">
-                            프로젝트 생성, 경기 관리, 득점 입력
+                            경기 진행, 득점 입력
                         </p>
+                        
                         <button type="button" role="button" class="btn btn-primary" onclick="selectRole('viewer')" style="background:var(--primary);" aria-label="관람 모드 선택 - 실시간 점수 확인, 경기 기록 보기">
                             👁️ 관람 모드
                         </button>
@@ -748,25 +796,17 @@
                 app.innerHTML = `
                     <div class="header">
                         <h1>🔐 심판 모드</h1>
-                        <p>프로젝트 관리 · 득점 입력</p>
+                        <p>경기 진행 · 득점 입력</p>
                     </div>
                     <div class="card">
-                        <h2>프로젝트 관리</h2>
-                        <button type="button" role="button" class="btn btn-primary" onclick="goTo('create-project')" aria-label="새 프로젝트 생성">📁 새 프로젝트 생성</button>
-                        <button type="button" role="button" class="btn btn-primary" onclick="goTo('project-list')" aria-label="프로젝트 목록 보기">📂 프로젝트 목록</button>
+                        <h2>경기 관리</h2>
+                        <button type="button" role="button" class="btn btn-primary" onclick="goTo('project-list')" aria-label="프로젝트 목록 보기">📂 대회/경기 목록</button>
                     </div>
                     <div class="card" style="background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%); color:white;">
                         <h2 style="color:white;">🎯 심판 연습 모드</h2>
-                        <p style="font-size:14px; margin-bottom:12px; opacity:0.9;">비밀번호 없이 빠르게 연습할 수 있습니다. 세트 수를 자유롭게 선택 가능!</p>
+                        <p style="font-size:14px; margin-bottom:12px; opacity:0.9;">비밀번호 없이 빠르게 연습할 수 있습니다.</p>
                         <button type="button" class="btn" onclick="goTo('practice-mode')" style="background:white; color:#ff5722; width:100%;" aria-label="심판 연습 모드 시작">
                             🎯 연습 시작
-                        </button>
-                    </div>
-                    <div class="card" style="background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:white;">
-                        <h2 style="color:white;">🎲 랜덤 팀 리그전</h2>
-                        <p style="font-size:14px; margin-bottom:12px; opacity:0.9;">참가자를 입력하면 랜덤으로 팀을 구성하고 리그전을 진행합니다.</p>
-                        <button type="button" class="btn" onclick="goTo('random-team-league')" style="background:white; color:#667eea; width:100%;" aria-label="랜덤 팀 리그전 시작">
-                            🎲 랜덤 팀 리그전 시작
                         </button>
                     </div>
                     <div class="card">
@@ -774,11 +814,227 @@
                     </div>
                 `;
             }
+            else if (screen === 'bracket-home') {
+                // 대진 설정 모드 홈
+                const tournamentList = projects.filter(p => p.tournamentType).map((p, i) => {
+                    const actualIndex = projects.indexOf(p);
+                    const matchCount = p.matches?.length || 0;
+                    const completedCount = p.matches?.filter(m => m.status === 'completed').length || 0;
+                    const formatName = p.tournamentType === 'group-only' ? '조별 리그' : 
+                                       p.tournamentType === 'group-knockout' ? '조별+토너먼트' : '토너먼트';
+                    return `
+                        <div style="padding:16px; margin:8px 0; background:var(--bg-secondary); border-radius:8px; cursor:pointer; border-left:4px solid #1976d2;" onclick="openBracketProject(${actualIndex})">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <strong>${p.name}</strong>
+                                <span style="font-size:12px; background:#e3f2fd; color:#1976d2; padding:2px 8px; border-radius:4px;">${formatName}</span>
+                            </div>
+                            <div style="font-size:13px; color:var(--text-secondary); margin-top:4px;">
+                                ${matchCount}경기 중 ${completedCount}경기 완료
+                            </div>
+                        </div>
+                    `;
+                }).join('') || '<p style="text-align:center; color:var(--text-secondary); padding:20px;">생성된 대회가 없습니다.</p>';
+                
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);">
+                        <h1 style="color:white;">🏆 대진 설정</h1>
+                        <p style="color:rgba(255,255,255,0.9);">대회 생성 · 조편성 · 수정</p>
+                    </div>
+                    <div class="card">
+                        <button type="button" class="btn btn-primary" onclick="goTo('tournament-wizard')" style="width:100%; background:linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);" aria-label="새 대회 만들기">
+                            ➕ 새 대회 만들기
+                        </button>
+                    </div>
+                    <div class="card">
+                        <h3>📋 대회 목록</h3>
+                        ${tournamentList}
+                    </div>
+                    <div class="card">
+                        <button type="button" class="btn" onclick="goTo('home')" aria-label="모드 선택으로">← 모드 선택으로</button>
+                    </div>
+                `;
+            }
+            else if (screen === 'bracket-detail') {
+                // 대진 설정 상세 (수정 가능)
+                if (!currentProject) {
+                    goTo('bracket-home');
+                    return;
+                }
+                
+                const p = currentProject;
+                const isTeam = p.competitionType === 'team';
+                const unitName = isTeam ? '팀' : '명';
+                const formatName = p.tournamentType === 'group-only' ? '조별 리그만' : 
+                                   p.tournamentType === 'group-knockout' ? '조별 리그 + 토너먼트' : '토너먼트만';
+                
+                // 조별 리그 표시
+                let groupsHTML = '';
+                if (p.groups && p.groups.length > 0) {
+                    groupsHTML = `
+                        <h3>📊 조 편성</h3>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:16px;">
+                            ${p.groups.map((g, gIdx) => `
+                                <div style="background:#f5f5f5; padding:12px; border-radius:8px;">
+                                    <div style="font-weight:600; margin-bottom:8px; color:#1976d2; display:flex; justify-content:space-between;">
+                                        <span>${g.name}</span>
+                                        <button class="btn" onclick="editGroup(${gIdx})" style="padding:2px 8px; min-width:auto; font-size:12px;">✏️</button>
+                                    </div>
+                                    ${g.members.map((m, i) => `<div style="font-size:13px; padding:4px 0;">${i+1}. ${m}</div>`).join('')}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+                
+                // 경기 목록
+                let matchesHTML = '';
+                if (p.matches && p.matches.length > 0) {
+                    const pendingMatches = p.matches.filter(m => m.status !== 'completed');
+                    const completedMatches = p.matches.filter(m => m.status === 'completed');
+                    
+                    matchesHTML = `
+                        <h3>⚔️ 경기 목록 (${p.matches.length}경기)</h3>
+                        <div style="max-height:300px; overflow-y:auto;">
+                            ${pendingMatches.length > 0 ? `
+                                <div style="font-size:13px; color:#666; margin-bottom:8px;">대기 중 (${pendingMatches.length})</div>
+                                ${pendingMatches.slice(0, 10).map(m => `
+                                    <div style="padding:10px; margin:4px 0; background:#fff3e0; border-radius:6px; display:flex; justify-content:space-between; align-items:center;">
+                                        <span>${m.groupName ? `[${m.groupName}] ` : ''}${m.player1Name} vs ${m.player2Name}</span>
+                                        <button class="btn" onclick="editMatch(${m.id})" style="padding:2px 8px; min-width:auto; font-size:12px;">✏️</button>
+                                    </div>
+                                `).join('')}
+                                ${pendingMatches.length > 10 ? `<div style="text-align:center; color:#666; padding:8px;">...외 ${pendingMatches.length - 10}경기</div>` : ''}
+                            ` : ''}
+                            ${completedMatches.length > 0 ? `
+                                <div style="font-size:13px; color:#666; margin:12px 0 8px 0;">완료됨 (${completedMatches.length})</div>
+                                ${completedMatches.slice(0, 5).map(m => {
+                                    const score = m.setScores.map(s => `${s.player1}-${s.player2}`).join(', ');
+                                    return `
+                                        <div style="padding:10px; margin:4px 0; background:#e8f5e9; border-radius:6px;">
+                                            <span>${m.groupName ? `[${m.groupName}] ` : ''}${m.player1Name} vs ${m.player2Name}</span>
+                                            <span style="float:right; font-size:12px; color:#666;">${score}</span>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            ` : ''}
+                        </div>
+                    `;
+                }
+                
+                app.innerHTML = `
+                    <div class="card">
+                        <button class="btn" onclick="goTo('bracket-home')" style="margin-bottom:16px;">← 대회 목록</button>
+                        
+                        <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:16px;">
+                            <div>
+                                <h2 style="margin:0;">${p.name}</h2>
+                                <div style="font-size:13px; color:var(--text-secondary); margin-top:4px;">
+                                    ${p.date || ''} ${p.location ? '· ' + p.location : ''}
+                                </div>
+                            </div>
+                            <button class="btn" onclick="editTournamentInfo()" style="padding:4px 12px;">✏️ 수정</button>
+                        </div>
+                        
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px;">
+                            <span style="background:#e3f2fd; color:#1976d2; padding:4px 12px; border-radius:16px; font-size:13px;">${formatName}</span>
+                            <span style="background:#f5f5f5; padding:4px 12px; border-radius:16px; font-size:13px;">${isTeam ? '팀전' : '개인전'}</span>
+                            <span style="background:#f5f5f5; padding:4px 12px; border-radius:16px; font-size:13px;">🔑 ${p.bracketPin || '없음'}</span>
+                        </div>
+                        
+                        ${groupsHTML}
+                        ${matchesHTML}
+                        
+                        <div style="margin-top:20px; padding-top:16px; border-top:1px solid #eee;">
+                            <button class="btn" onclick="shuffleGroups()" style="margin-right:8px;">🔀 조 다시 섞기</button>
+                            <button class="btn btn-danger" onclick="deleteTournament()">🗑️ 대회 삭제</button>
+                        </div>
+                    </div>
+                `;
+            }
+            else if (screen === 'bracket-password') {
+                // 대진 설정 비밀번호 입력
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);">
+                        <h1 style="color:white;">🏆 대진 설정</h1>
+                        <p style="color:rgba(255,255,255,0.9);">운영자 인증</p>
+                    </div>
+                    <div class="card">
+                        <div style="text-align:center; margin-bottom:20px;">
+                            <span style="font-size:48px;">🔐</span>
+                            <h3>비밀번호 입력</h3>
+                            <p style="color:var(--text-secondary); font-size:14px;">대진 설정을 위해 비밀번호를 입력하세요</p>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>비밀번호</label>
+                            <input type="password" id="bracket-pin" placeholder="비밀번호 입력" style="width:100%;">
+                        </div>
+                        
+                        <button type="button" class="btn btn-primary" onclick="verifyBracketPin()" style="width:100%;">확인</button>
+                        
+                        <div style="margin-top:20px; padding-top:16px; border-top:1px solid #eee;">
+                            <p style="font-size:13px; color:var(--text-secondary); text-align:center;">
+                                처음이신가요? 새 비밀번호를 설정하세요.
+                            </p>
+                            <button type="button" class="btn" onclick="goTo('bracket-set-password')" style="width:100%;">🆕 새 비밀번호 설정</button>
+                        </div>
+                        
+                        <button type="button" class="btn" onclick="goTo('home')" style="width:100%; margin-top:12px;">← 모드 선택으로</button>
+                    </div>
+                `;
+                
+                setTimeout(() => {
+                    document.getElementById('bracket-pin')?.focus();
+                    document.getElementById('bracket-pin')?.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') verifyBracketPin();
+                    });
+                }, 100);
+            }
+            else if (screen === 'bracket-set-password') {
+                // 대진 설정 비밀번호 설정
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);">
+                        <h1 style="color:white;">🏆 대진 설정</h1>
+                        <p style="color:rgba(255,255,255,0.9);">비밀번호 설정</p>
+                    </div>
+                    <div class="card">
+                        <div style="background:#fff3e0; padding:12px; border-radius:8px; margin-bottom:16px;">
+                            <strong>⚠️ 중요</strong>
+                            <p style="font-size:13px; margin-top:4px;">이 비밀번호는 대진 설정 모드 접근에 사용됩니다. 잊어버리지 않도록 기억해주세요.</p>
+                        </div>
+                        
+                        <div style="background:#e3f2fd; padding:12px; border-radius:8px; margin-bottom:16px;">
+                            <strong>🔒 비밀번호 조건</strong>
+                            <ul style="font-size:13px; margin:8px 0 0 0; padding-left:20px;">
+                                <li>8자 이상</li>
+                                <li>영문 대문자 1개 이상</li>
+                                <li>영문 소문자 1개 이상</li>
+                                <li>숫자 1개 이상</li>
+                                <li>특수문자 1개 이상 (!@#$%^&*)</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>새 비밀번호</label>
+                            <input type="password" id="new-bracket-pin" placeholder="예: Showdown@2024" style="width:100%;" oninput="checkPasswordStrength()">
+                            <div id="pw-strength" style="margin-top:8px; font-size:13px;"></div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>비밀번호 확인</label>
+                            <input type="password" id="confirm-bracket-pin" placeholder="비밀번호 재입력" style="width:100%;">
+                        </div>
+                        
+                        <button type="button" class="btn btn-primary" onclick="setBracketPin()" style="width:100%;">비밀번호 설정</button>
+                        <button type="button" class="btn" onclick="goTo('bracket-password')" style="width:100%; margin-top:8px;">← 돌아가기</button>
+                    </div>
+                `;
+            }
             else if (screen === 'viewer-home') {
                 app.innerHTML = `
                     <div class="header" style="background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
                         <h1>👁️ 관람 모드</h1>
-                        <p>실시간 점수 · 대회 결과 확인</p>
+                        <p>실시간 점수 · 일정 조회 · 결과 확인</p>
                     </div>
                     <div class="card">
                         <div style="background:#e3f2fd; border-left:4px solid #2196f3; padding:12px; border-radius:8px; margin-bottom:16px;">
@@ -787,6 +1043,14 @@
                         </div>
                         <button type="button" class="btn btn-primary" onclick="goTo('project-list')" style="width:100%; margin-bottom:16px;" aria-label="실시간 경기 점수 확인">
                             📊 실시간 경기 보기
+                        </button>
+                        
+                        <div style="background:#fff3e0; border-left:4px solid #ff9800; padding:12px; border-radius:8px; margin-bottom:16px;">
+                            <strong>📅 내 일정 조회</strong><br>
+                            <span style="font-size:14px;">이름으로 내 경기 일정과 상대를 확인합니다.</span>
+                        </div>
+                        <button type="button" class="btn" onclick="goTo('player-schedule')" style="width:100%; margin-bottom:16px; background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%); color:white;" aria-label="내 일정 조회">
+                            📅 내 일정 조회
                         </button>
                         
                         <div style="background:#e8f5e9; border-left:4px solid #4caf50; padding:12px; border-radius:8px; margin-bottom:16px;">
@@ -798,6 +1062,49 @@
                         </button>
                         
                         <button type="button" class="btn" onclick="goTo('home')" style="margin-top:8px;" aria-label="모드 선택 화면으로 돌아가기">← 모드 선택으로</button>
+                    </div>
+                `;
+            }
+            else if (screen === 'player-schedule') {
+                // 선수/팀 일정 조회 화면
+                const tournamentProjects = projects.filter(p => p.tournamentType && p.matches?.length > 0);
+                
+                const projectOptions = tournamentProjects.map((p, i) => {
+                    const actualIndex = projects.indexOf(p);
+                    return `<option value="${actualIndex}">${p.name}</option>`;
+                }).join('');
+                
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%);">
+                        <h1 style="color:white;">📅 내 일정 조회</h1>
+                        <p style="color:rgba(255,255,255,0.9);">이름으로 경기 일정 확인</p>
+                    </div>
+                    <div class="card">
+                        <div class="form-group">
+                            <label>대회 선택</label>
+                            <select id="schedule-project" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;" onchange="onScheduleProjectChange()">
+                                <option value="">-- 대회를 선택하세요 --</option>
+                                ${projectOptions}
+                            </select>
+                        </div>
+                        
+                        <div id="participant-select-area" style="display:none;">
+                            <div class="form-group">
+                                <label>이름 선택 또는 입력</label>
+                                <select id="schedule-name-select" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px; margin-bottom:8px;" onchange="onScheduleNameSelect()">
+                                    <option value="">-- 목록에서 선택 --</option>
+                                </select>
+                                <input type="text" id="schedule-name-input" placeholder="또는 이름 직접 입력" style="width:100%;">
+                            </div>
+                            
+                            <button type="button" class="btn btn-primary" onclick="lookupSchedule()" style="width:100%;">
+                                🔍 일정 조회
+                            </button>
+                        </div>
+                        
+                        <div id="schedule-result" style="margin-top:20px;"></div>
+                        
+                        <button type="button" class="btn" onclick="goTo('viewer-home')" style="width:100%; margin-top:16px;">← 돌아가기</button>
                     </div>
                 `;
             }
@@ -842,7 +1149,11 @@
                             🎯 연습 경기 시작
                         </button>
                         
-                        <button type="button" class="btn" onclick="goTo('referee-home')" style="width:100%; margin-top:12px;" aria-label="돌아가기">
+                        <button type="button" class="btn" onclick="goTo('practice-history')" style="width:100%; margin-top:12px;" aria-label="저장된 연습 기록 보기">
+                            📋 저장된 기록 보기
+                        </button>
+                        
+                        <button type="button" class="btn" onclick="goTo('referee-home')" style="width:100%; margin-top:8px;" aria-label="돌아가기">
                             ← 돌아가기
                         </button>
                     </div>
@@ -857,6 +1168,459 @@
                             setsGroup.style.display = this.value === 'team' ? 'none' : 'block';
                         };
                     }
+                }, 100);
+            }
+            else if (screen === 'practice-result') {
+                // 연습 경기 결과 화면
+                if (!currentMatch) {
+                    goTo('practice-mode');
+                    return;
+                }
+                
+                const m = currentMatch;
+                const p1Wins = m.setScores.filter(s => s.player1 > s.player2).length;
+                const p2Wins = m.setScores.filter(s => s.player2 > s.player1).length;
+                const winner = m.winner || (p1Wins > p2Wins ? m.player1Name : m.player2Name);
+                
+                // 세트별 점수
+                const setScoresHTML = m.setScores.map((s, idx) => {
+                    if (s.player1 === 0 && s.player2 === 0) return '';
+                    const setWinner = s.player1 > s.player2 ? m.player1Name : m.player2Name;
+                    return `
+                        <div style="display:flex; justify-content:space-between; padding:12px; margin:4px 0; background:${s.player1 > s.player2 ? '#e3f2fd' : '#fff3e0'}; border-radius:8px;">
+                            <span>세트 ${idx + 1}</span>
+                            <span style="font-weight:600;">${s.player1} : ${s.player2}</span>
+                            <span style="color:#666;">${setWinner}</span>
+                        </div>
+                    `;
+                }).join('');
+                
+                // 득점 히스토리
+                const historyHTML = m.history && m.history.length > 0 ? `
+                    <div style="margin-top:20px;">
+                        <h4 style="margin:0 0 8px 0;">📋 득점 기록 (${m.history.length})</h4>
+                        <div style="max-height:200px; overflow-y:auto; background:#f5f5f5; border-radius:8px; padding:8px;">
+                            ${m.history.slice().reverse().map((h, i) => `
+                                <div style="padding:6px 8px; border-bottom:1px solid #eee; font-size:13px;">
+                                    <span style="color:#666;">#${m.history.length - i}</span>
+                                    <span style="margin-left:8px;">${h.player === 'player1' ? m.player1Name : m.player2Name}</span>
+                                    <span style="color:#1976d2; font-weight:600;">+${h.points}</span>
+                                    <span style="color:#888; margin-left:4px;">(${h.type})</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : '';
+                
+                app.innerHTML = `
+                    <div class="card">
+                        <div style="text-align:center; padding:20px; background:linear-gradient(135deg, #4caf50 0%, #2e7d32 100%); color:white; border-radius:12px; margin-bottom:20px;">
+                            <div style="font-size:48px; margin-bottom:8px;">🏆</div>
+                            <h2 style="margin:0; color:white;">연습 경기 종료</h2>
+                            <div style="font-size:24px; margin-top:12px; font-weight:700;">${winner} 승리!</div>
+                            <div style="font-size:18px; margin-top:8px; opacity:0.9;">세트 ${p1Wins} : ${p2Wins}</div>
+                        </div>
+                        
+                        <div style="display:flex; justify-content:space-around; margin-bottom:20px; padding:16px; background:#f5f5f5; border-radius:8px;">
+                            <div style="text-align:center;">
+                                <div style="font-size:14px; color:#666;">${m.player1Name}</div>
+                                <div style="font-size:28px; font-weight:700; color:${p1Wins > p2Wins ? '#4caf50' : '#666'};">${p1Wins}</div>
+                            </div>
+                            <div style="font-size:24px; color:#999; align-self:center;">세트</div>
+                            <div style="text-align:center;">
+                                <div style="font-size:14px; color:#666;">${m.player2Name}</div>
+                                <div style="font-size:28px; font-weight:700; color:${p2Wins > p1Wins ? '#4caf50' : '#666'};">${p2Wins}</div>
+                            </div>
+                        </div>
+                        
+                        <h4 style="margin:0 0 8px 0;">세트별 점수</h4>
+                        ${setScoresHTML}
+                        
+                        ${historyHTML}
+                        
+                        <div style="margin-top:24px; display:flex; flex-direction:column; gap:8px;">
+                            <div style="text-align:center; color:#4caf50; font-size:14px; margin-bottom:8px;">
+                                ✅ 기록이 자동 저장되었습니다
+                            </div>
+                            <button class="btn" onclick="goTo('practice-history')" style="background:#4caf50; color:white;">
+                                📋 저장된 기록 보기
+                            </button>
+                            <div style="display:flex; gap:8px;">
+                                <button class="btn btn-primary" onclick="goTo('practice-mode')" style="flex:1;">🎯 새 연습 경기</button>
+                                <button class="btn" onclick="goTo('referee-home')" style="flex:1;">← 돌아가기</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            else if (screen === 'practice-history') {
+                // 연습 경기 기록 목록
+                const practiceHistory = JSON.parse(localStorage.getItem('practiceHistory') || '[]');
+                
+                const historyList = practiceHistory.length > 0 ? practiceHistory.slice().reverse().map((m, idx) => {
+                    const realIdx = practiceHistory.length - 1 - idx;
+                    const p1Wins = m.setScores?.filter(s => s.player1 > s.player2).length || 0;
+                    const p2Wins = m.setScores?.filter(s => s.player2 > s.player1).length || 0;
+                    const date = m.finishedAt ? new Date(m.finishedAt).toLocaleDateString('ko-KR') : '';
+                    
+                    return `
+                        <div style="padding:16px; margin:8px 0; background:var(--bg-secondary); border-radius:8px; cursor:pointer; border-left:4px solid #ff9800;" onclick="viewPracticeRecord(${realIdx})">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <div>
+                                    <strong>${m.player1Name} vs ${m.player2Name}</strong>
+                                    <div style="font-size:13px; color:var(--text-secondary); margin-top:4px;">
+                                        ${p1Wins} : ${p2Wins} 세트 · ${m.winner} 승
+                                    </div>
+                                </div>
+                                <div style="text-align:right;">
+                                    <div style="font-size:12px; color:var(--text-secondary);">${date}</div>
+                                    <button class="btn btn-danger" onclick="event.stopPropagation(); deletePracticeRecord(${realIdx})" style="padding:4px 8px; min-width:auto; margin-top:4px; font-size:12px;">🗑️</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('') : '<p style="text-align:center; color:var(--text-secondary); padding:20px;">저장된 연습 기록이 없습니다.</p>';
+                
+                app.innerHTML = `
+                    <div class="card">
+                        <div class="header" style="margin:-20px -20px 20px -20px; padding:20px; border-radius:12px 12px 0 0; background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%);">
+                            <h1 style="color:white; margin:0;">📋 연습 기록</h1>
+                            <p style="color:rgba(255,255,255,0.9); margin:4px 0 0 0;">${practiceHistory.length}개의 기록</p>
+                        </div>
+                        
+                        ${historyList}
+                        
+                        ${practiceHistory.length > 0 ? `
+                            <button class="btn btn-danger" onclick="clearPracticeHistory()" style="width:100%; margin-top:16px;">
+                                🗑️ 전체 기록 삭제
+                            </button>
+                        ` : ''}
+                        
+                        <button class="btn" onclick="goTo('practice-mode')" style="width:100%; margin-top:8px;">
+                            ← 돌아가기
+                        </button>
+                    </div>
+                `;
+            }
+            else if (screen === 'practice-detail') {
+                // 연습 경기 상세 기록
+                const practiceHistory = JSON.parse(localStorage.getItem('practiceHistory') || '[]');
+                const recordIdx = window.currentPracticeRecordIdx;
+                
+                if (recordIdx === undefined || !practiceHistory[recordIdx]) {
+                    goTo('practice-history');
+                    return;
+                }
+                
+                const m = practiceHistory[recordIdx];
+                const p1Wins = m.setScores?.filter(s => s.player1 > s.player2).length || 0;
+                const p2Wins = m.setScores?.filter(s => s.player2 > s.player1).length || 0;
+                
+                // 세트별 점수
+                const setScoresHTML = m.setScores?.map((s, idx) => {
+                    if (s.player1 === 0 && s.player2 === 0) return '';
+                    const setWinner = s.player1 > s.player2 ? m.player1Name : m.player2Name;
+                    return `
+                        <div style="display:flex; justify-content:space-between; padding:12px; margin:4px 0; background:${s.player1 > s.player2 ? '#e3f2fd' : '#fff3e0'}; border-radius:8px;">
+                            <span>세트 ${idx + 1}</span>
+                            <span style="font-weight:600;">${s.player1} : ${s.player2}</span>
+                            <span style="color:#666;">${setWinner}</span>
+                        </div>
+                    `;
+                }).join('') || '';
+                
+                // 득점 히스토리
+                const historyHTML = m.history && m.history.length > 0 ? `
+                    <div style="margin-top:20px;">
+                        <h4 style="margin:0 0 8px 0;">📋 득점 기록 (${m.history.length})</h4>
+                        <div style="max-height:300px; overflow-y:auto; background:#f5f5f5; border-radius:8px; padding:8px;">
+                            ${m.history.slice().reverse().map((h, i) => `
+                                <div style="padding:6px 8px; border-bottom:1px solid #eee; font-size:13px;">
+                                    <span style="color:#666;">#${m.history.length - i}</span>
+                                    <span style="margin-left:8px;">${h.player === 'player1' ? m.player1Name : m.player2Name}</span>
+                                    <span style="color:#1976d2; font-weight:600;">+${h.points}</span>
+                                    <span style="color:#888; margin-left:4px;">(${h.type})</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : '';
+                
+                app.innerHTML = `
+                    <div class="card">
+                        <button class="btn" onclick="goTo('practice-history')" style="margin-bottom:16px;">← 기록 목록</button>
+                        
+                        <div style="text-align:center; padding:20px; background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%); color:white; border-radius:12px; margin-bottom:20px;">
+                            <h2 style="margin:0; color:white;">${m.player1Name} vs ${m.player2Name}</h2>
+                            <div style="font-size:24px; margin-top:12px; font-weight:700;">${m.winner} 승리!</div>
+                            <div style="font-size:18px; margin-top:8px; opacity:0.9;">세트 ${p1Wins} : ${p2Wins}</div>
+                            <div style="font-size:13px; margin-top:8px; opacity:0.8;">${m.finishedAt ? new Date(m.finishedAt).toLocaleString('ko-KR') : ''}</div>
+                        </div>
+                        
+                        <h4 style="margin:0 0 8px 0;">세트별 점수</h4>
+                        ${setScoresHTML}
+                        
+                        ${historyHTML}
+                    </div>
+                `;
+            }
+            else if (screen === 'tournament-wizard') {
+                // 대회 대진 설정 위자드
+                const tw = window.tournamentWizard || { 
+                    step: 1, 
+                    info: { name: '', date: '', location: '', type: 'individual' },
+                    participants: [],
+                    format: 'group-knockout', // group-only, knockout-only, group-knockout
+                    groupSettings: { groupCount: 4, perGroup: 4, advanceCount: 2 },
+                    knockoutSettings: { size: 8 },
+                    groups: [],
+                    bracket: null
+                };
+                window.tournamentWizard = tw;
+                
+                const stepTitles = ['', '대회 정보', '참가자 입력', '대회 방식', '세부 설정', '대진표 확인'];
+                const totalSteps = 5;
+                
+                // 진행률 표시
+                const progressHTML = `
+                    <div style="margin-bottom:24px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                            <span style="font-weight:600;">Step ${tw.step}/${totalSteps}: ${stepTitles[tw.step]}</span>
+                            <span style="color:var(--text-secondary);">${Math.round(tw.step/totalSteps*100)}%</span>
+                        </div>
+                        <div style="height:8px; background:#e0e0e0; border-radius:4px; overflow:hidden;">
+                            <div style="height:100%; width:${tw.step/totalSteps*100}%; background:linear-gradient(90deg, #1976d2, #0d47a1); transition:width 0.3s;"></div>
+                        </div>
+                    </div>
+                `;
+                
+                let stepContent = '';
+                
+                if (tw.step === 1) {
+                    // Step 1: 대회 정보
+                    stepContent = `
+                        <div class="form-group">
+                            <label>대회명 *</label>
+                            <input type="text" id="tw-name" value="${tw.info.name}" placeholder="예: 2024 쇼다운 챔피언십" style="width:100%;">
+                        </div>
+                        <div class="form-group">
+                            <label>날짜</label>
+                            <input type="date" id="tw-date" value="${tw.info.date || new Date().toISOString().split('T')[0]}" style="width:100%;">
+                        </div>
+                        <div class="form-group">
+                            <label>장소</label>
+                            <input type="text" id="tw-location" value="${tw.info.location}" placeholder="예: 서울체육관" style="width:100%;">
+                        </div>
+                        <div class="form-group">
+                            <label>경기 유형 *</label>
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px;">
+                                <label style="display:flex; align-items:center; gap:8px; padding:16px; background:${tw.info.type === 'individual' ? '#e3f2fd' : '#f5f5f5'}; border-radius:8px; cursor:pointer; border:2px solid ${tw.info.type === 'individual' ? '#1976d2' : 'transparent'};">
+                                    <input type="radio" name="tw-type" value="individual" ${tw.info.type === 'individual' ? 'checked' : ''} onchange="window.tournamentWizard.info.type=this.value;render();">
+                                    <div>
+                                        <div style="font-weight:600;">👤 개인전</div>
+                                        <div style="font-size:12px; color:#666;">11점 3세트</div>
+                                    </div>
+                                </label>
+                                <label style="display:flex; align-items:center; gap:8px; padding:16px; background:${tw.info.type === 'team' ? '#e3f2fd' : '#f5f5f5'}; border-radius:8px; cursor:pointer; border:2px solid ${tw.info.type === 'team' ? '#1976d2' : 'transparent'};">
+                                    <input type="radio" name="tw-type" value="team" ${tw.info.type === 'team' ? 'checked' : ''} onchange="window.tournamentWizard.info.type=this.value;render();">
+                                    <div>
+                                        <div style="font-weight:600;">👥 팀전</div>
+                                        <div style="font-size:12px; color:#666;">31점 단판</div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    `;
+                } else if (tw.step === 2) {
+                    // Step 2: 참가자 입력
+                    const unitName = tw.info.type === 'team' ? '팀' : '명';
+                    const participantList = tw.participants.map((p, i) => `
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:var(--bg-secondary); border-radius:6px; margin:4px 0;">
+                            <span>${i+1}. ${p}</span>
+                            <button class="btn btn-danger" onclick="removeTWParticipant(${i})" style="padding:4px 8px; min-width:auto;">✕</button>
+                        </div>
+                    `).join('') || '<p style="color:var(--text-secondary); text-align:center; padding:20px;">참가자를 추가해주세요</p>';
+                    
+                    stepContent = `
+                        <div style="background:#e8f5e9; padding:12px; border-radius:8px; margin-bottom:16px;">
+                            <strong>💡 팁</strong>
+                            <p style="font-size:13px; margin-top:4px;">여러 명을 한 번에 입력하려면 쉼표(,)로 구분하세요.</p>
+                        </div>
+                        
+                        <div style="display:flex; gap:8px; margin-bottom:16px;">
+                            <input type="text" id="tw-participant" placeholder="${tw.info.type === 'team' ? '팀 이름' : '선수 이름'} (쉼표로 구분)" style="flex:1;" onkeypress="if(event.key==='Enter')addTWParticipant()">
+                            <button class="btn btn-primary" onclick="addTWParticipant()">추가</button>
+                        </div>
+                        
+                        <div style="background:#f5f5f5; padding:12px; border-radius:8px; margin-bottom:12px;">
+                            <div style="font-size:20px; font-weight:bold;">총 ${tw.participants.length}${unitName}</div>
+                        </div>
+                        
+                        <div style="max-height:300px; overflow-y:auto;">
+                            ${participantList}
+                        </div>
+                        
+                        <button class="btn" onclick="clearTWParticipants()" style="margin-top:12px; width:100%;">🗑️ 전체 삭제</button>
+                    `;
+                } else if (tw.step === 3) {
+                    // Step 3: 대회 방식 선택
+                    stepContent = `
+                        <div style="display:flex; flex-direction:column; gap:12px;">
+                            <label style="display:block; padding:20px; background:${tw.format === 'group-only' ? '#e3f2fd' : '#f5f5f5'}; border-radius:12px; cursor:pointer; border:2px solid ${tw.format === 'group-only' ? '#1976d2' : 'transparent'};" onclick="setTWFormat('group-only')">
+                                <input type="radio" name="tw-format" value="group-only" ${tw.format === 'group-only' ? 'checked' : ''} style="display:none;">
+                                <div style="font-size:18px; font-weight:600; margin-bottom:4px;">📊 조별 리그만</div>
+                                <div style="font-size:13px; color:#666;">조별로 풀리그 진행 → 순위 결정</div>
+                                <div style="font-size:12px; color:#1976d2; margin-top:8px;">예: 4개 조, 조당 4명 → 16명 참가</div>
+                            </label>
+                            
+                            <label style="display:block; padding:20px; background:${tw.format === 'group-knockout' ? '#e3f2fd' : '#f5f5f5'}; border-radius:12px; cursor:pointer; border:2px solid ${tw.format === 'group-knockout' ? '#1976d2' : 'transparent'};" onclick="setTWFormat('group-knockout')">
+                                <input type="radio" name="tw-format" value="group-knockout" ${tw.format === 'group-knockout' ? 'checked' : ''} style="display:none;">
+                                <div style="font-size:18px; font-weight:600; margin-bottom:4px;">🏆 조별 리그 + 본선 토너먼트</div>
+                                <div style="font-size:13px; color:#666;">예선 조별 리그 → 상위 진출자 본선 토너먼트</div>
+                                <div style="font-size:12px; color:#1976d2; margin-top:8px;">예: 4개 조, 각 조 상위 2명 → 8강 토너먼트</div>
+                            </label>
+                            
+                            <label style="display:block; padding:20px; background:${tw.format === 'knockout-only' ? '#e3f2fd' : '#f5f5f5'}; border-radius:12px; cursor:pointer; border:2px solid ${tw.format === 'knockout-only' ? '#1976d2' : 'transparent'};" onclick="setTWFormat('knockout-only')">
+                                <input type="radio" name="tw-format" value="knockout-only" ${tw.format === 'knockout-only' ? 'checked' : ''} style="display:none;">
+                                <div style="font-size:18px; font-weight:600; margin-bottom:4px;">🥊 토너먼트만</div>
+                                <div style="font-size:13px; color:#666;">바로 녹아웃 토너먼트 진행</div>
+                                <div style="font-size:12px; color:#1976d2; margin-top:8px;">예: 16강 → 8강 → 4강 → 결승</div>
+                            </label>
+                        </div>
+                    `;
+                } else if (tw.step === 4) {
+                    // Step 4: 세부 설정
+                    const participantCount = tw.participants.length;
+                    
+                    if (tw.format === 'group-only' || tw.format === 'group-knockout') {
+                        // 조별 리그 설정
+                        const groupOptions = [2,3,4,5,6,8].map(n => {
+                            const perGroup = Math.ceil(participantCount / n);
+                            return `<option value="${n}" ${tw.groupSettings.groupCount === n ? 'selected' : ''}>${n}개 조 (조당 약 ${perGroup}${tw.info.type === 'team' ? '팀' : '명'})</option>`;
+                        }).join('');
+                        
+                        const advanceOptions = tw.format === 'group-knockout' ? `
+                            <div class="form-group">
+                                <label>본선 진출자 수 (조당)</label>
+                                <select id="tw-advance" onchange="updateTWSettings()" style="width:100%;">
+                                    <option value="1" ${tw.groupSettings.advanceCount === 1 ? 'selected' : ''}>각 조 1위만 (${tw.groupSettings.groupCount}명 진출)</option>
+                                    <option value="2" ${tw.groupSettings.advanceCount === 2 ? 'selected' : ''}>각 조 상위 2명 (${tw.groupSettings.groupCount * 2}명 진출)</option>
+                                    <option value="3" ${tw.groupSettings.advanceCount === 3 ? 'selected' : ''}>각 조 상위 3명 (${tw.groupSettings.groupCount * 3}명 진출)</option>
+                                </select>
+                            </div>
+                        ` : '';
+                        
+                        const knockoutOptions = tw.format === 'group-knockout' ? `
+                            <div style="background:#fff3e0; padding:16px; border-radius:8px; margin-top:16px;">
+                                <h4 style="margin:0 0 12px 0;">🥊 본선 토너먼트</h4>
+                                <div class="form-group" style="margin:0;">
+                                    <label>토너먼트 규모</label>
+                                    <select id="tw-knockout-size" onchange="updateTWSettings()" style="width:100%;">
+                                        <option value="4" ${tw.knockoutSettings.size === 4 ? 'selected' : ''}>4강 (4명)</option>
+                                        <option value="8" ${tw.knockoutSettings.size === 8 ? 'selected' : ''}>8강 (8명)</option>
+                                        <option value="16" ${tw.knockoutSettings.size === 16 ? 'selected' : ''}>16강 (16명)</option>
+                                        <option value="32" ${tw.knockoutSettings.size === 32 ? 'selected' : ''}>32강 (32명)</option>
+                                    </select>
+                                </div>
+                                <div id="tw-knockout-validation" style="margin-top:8px; font-size:13px;"></div>
+                            </div>
+                        ` : '';
+                        
+                        stepContent = `
+                            <div style="background:#e3f2fd; padding:16px; border-radius:8px; margin-bottom:16px;">
+                                <h4 style="margin:0 0 12px 0;">📊 조별 리그 설정</h4>
+                                <div class="form-group" style="margin:0;">
+                                    <label>조 개수</label>
+                                    <select id="tw-group-count" onchange="updateTWSettings()" style="width:100%;">
+                                        ${groupOptions}
+                                    </select>
+                                </div>
+                                ${advanceOptions}
+                            </div>
+                            ${knockoutOptions}
+                            
+                            <div style="background:#f5f5f5; padding:16px; border-radius:8px; margin-top:16px;">
+                                <h4 style="margin:0 0 8px 0;">📋 설정 요약</h4>
+                                <div id="tw-settings-summary" style="font-size:14px;"></div>
+                            </div>
+                        `;
+                    } else {
+                        // 토너먼트만
+                        const sizes = [4, 8, 16, 32, 64].filter(s => s <= participantCount * 2);
+                        const sizeOptions = sizes.map(s => 
+                            `<option value="${s}" ${tw.knockoutSettings.size === s ? 'selected' : ''}>${s}강 (${s}명 필요)</option>`
+                        ).join('');
+                        
+                        stepContent = `
+                            <div style="background:#fff3e0; padding:16px; border-radius:8px; margin-bottom:16px;">
+                                <h4 style="margin:0 0 12px 0;">🥊 토너먼트 설정</h4>
+                                <div class="form-group" style="margin:0;">
+                                    <label>토너먼트 규모</label>
+                                    <select id="tw-knockout-size" onchange="updateTWSettings()" style="width:100%;">
+                                        ${sizeOptions}
+                                    </select>
+                                </div>
+                                <p style="font-size:13px; color:#666; margin-top:8px;">
+                                    현재 참가자: ${participantCount}${tw.info.type === 'team' ? '팀' : '명'}
+                                </p>
+                            </div>
+                            
+                            <div style="background:#e8f5e9; padding:12px; border-radius:8px;">
+                                <strong>💡 부전승 안내</strong>
+                                <p style="font-size:13px; margin-top:4px;">참가자가 토너먼트 규모보다 적으면 일부 선수는 부전승으로 다음 라운드 진출합니다.</p>
+                            </div>
+                        `;
+                    }
+                } else if (tw.step === 5) {
+                    // Step 5: 대진표 확인
+                    const previewHTML = generateTWPreview();
+                    
+                    stepContent = `
+                        <div style="background:#e8f5e9; padding:16px; border-radius:8px; margin-bottom:16px;">
+                            <h3 style="margin:0 0 8px 0;">✅ 대진표 미리보기</h3>
+                            <p style="font-size:13px; margin:0;">아래 대진표를 확인하고 확정하세요.</p>
+                        </div>
+                        
+                        <div id="tw-preview" style="max-height:400px; overflow-y:auto;">
+                            ${previewHTML}
+                        </div>
+                        
+                        <div style="background:#fff3e0; padding:12px; border-radius:8px; margin-top:16px;">
+                            <strong>⚠️ 확정 전 확인</strong>
+                            <ul style="font-size:13px; margin:8px 0 0 0; padding-left:20px;">
+                                <li>조 편성이 올바른지 확인하세요</li>
+                                <li>확정 후에는 프로젝트로 저장됩니다</li>
+                                <li>각 경기는 실제 경기 화면에서 진행합니다</li>
+                            </ul>
+                        </div>
+                    `;
+                }
+                
+                // 네비게이션 버튼
+                const navButtons = `
+                    <div style="display:flex; gap:12px; margin-top:24px;">
+                        ${tw.step > 1 ? `<button class="btn" onclick="twPrevStep()" style="flex:1;">← 이전</button>` : `<button class="btn" onclick="goTo('bracket-home')" style="flex:1;">← 취소</button>`}
+                        ${tw.step < totalSteps ? 
+                            `<button class="btn btn-primary" onclick="twNextStep()" style="flex:1;">다음 →</button>` : 
+                            `<button class="btn btn-primary" onclick="confirmTournament()" style="flex:1; background:#4caf50;">✅ 대진 확정</button>`
+                        }
+                    </div>
+                `;
+                
+                app.innerHTML = `
+                    <div class="card">
+                        <div class="header" style="margin:-20px -20px 20px -20px; padding:20px; border-radius:12px 12px 0 0; background:linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);">
+                            <h1 style="color:white; margin:0;">🏆 대회 대진 설정</h1>
+                        </div>
+                        ${progressHTML}
+                        ${stepContent}
+                        ${navButtons}
+                    </div>
+                `;
+                
+                // 설정 요약 업데이트
+                setTimeout(() => {
+                    if (tw.step === 4) updateTWSettingsSummary();
                 }, 100);
             }
             else if (screen === 'viewer-select-project') {
@@ -1261,13 +2025,26 @@
                             <option value="team">팀전</option>
                         </select>
                         
-                        <label for="tournament-type">대회 유형 *</label>
-                        <select id="tournament-type" onchange="onTournamentTypeChange()" aria-label="대회 유형 선택">
-                            <option value="free">자유 경기 (대진 없음)</option>
-                            <option value="group">조별 리그</option>
-                            <option value="tournament">토너먼트</option>
-                            <option value="group-tournament">조별 리그 + 결선 토너먼트</option>
-                        </select>
+                        <label style="margin-top:16px; margin-bottom:8px; display:block;">대회 유형 *</label>
+                        <div id="tournament-type-cards" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                            <button type="button" class="tournament-type-btn active" data-type="free" onclick="selectTournamentType('free')" style="padding:16px; border:2px solid var(--primary); border-radius:8px; background:white; cursor:pointer; text-align:left;">
+                                <div style="font-weight:bold; font-size:16px;">📋 자유 경기</div>
+                                <div style="font-size:12px; color:#666; margin-top:4px;">대진 없이 경기만 기록</div>
+                            </button>
+                            <button type="button" class="tournament-type-btn" data-type="group" onclick="selectTournamentType('group')" style="padding:16px; border:2px solid #ddd; border-radius:8px; background:white; cursor:pointer; text-align:left;">
+                                <div style="font-weight:bold; font-size:16px;">🏆 조별 리그</div>
+                                <div style="font-size:12px; color:#666; margin-top:4px;">모든 팀이 한 번씩 대결</div>
+                            </button>
+                            <button type="button" class="tournament-type-btn" data-type="tournament" onclick="selectTournamentType('tournament')" style="padding:16px; border:2px solid #ddd; border-radius:8px; background:white; cursor:pointer; text-align:left;">
+                                <div style="font-weight:bold; font-size:16px;">🥊 토너먼트</div>
+                                <div style="font-size:12px; color:#666; margin-top:4px;">지면 탈락하는 녹아웃</div>
+                            </button>
+                            <button type="button" class="tournament-type-btn" data-type="group-tournament" onclick="selectTournamentType('group-tournament')" style="padding:16px; border:2px solid #ddd; border-radius:8px; background:white; cursor:pointer; text-align:left;">
+                                <div style="font-weight:bold; font-size:16px;">🎯 조별+토너먼트</div>
+                                <div style="font-size:12px; color:#666; margin-top:4px;">조별 예선 → 결선 토너먼트</div>
+                            </button>
+                        </div>
+                        <input type="hidden" id="tournament-type" value="free">
                         
                         <div id="group-settings" style="display:none; margin-top:16px; padding:16px; background:var(--bg-secondary); border-radius:8px;">
                             <h3 style="margin-bottom:12px;">조별 리그 설정</h3>
@@ -1426,7 +2203,7 @@
             }
             else if (screen === 'project-detail') {
                 const active = currentProject.matches ? currentProject.matches.filter(m => m.status === 'active') : [];
-                const finished = currentProject.matches ? currentProject.matches.filter(m => m.status === 'finished') : [];
+                const finished = currentProject.matches ? currentProject.matches.filter(m => m.status === 'completed') : [];
                 const isReferee = (userRole === 'referee');
                 const hasMatches = (active.length > 0 || finished.length > 0);
                 
@@ -1597,7 +2374,7 @@
                             <div>
                                 <h4>${m.player1Name} vs ${m.player2Name}</h4>
                                 <p style="color:var(--text-secondary); font-size:14px; margin-top:4px">
-                                    ${m.status === 'finished' ? '완료' : `세트 ${m.currentSet}/${m.sets}`}
+                                    ${m.status === 'completed' ? '완료' : `세트 ${m.currentSet}/${m.sets}`}
                                 </p>
                             </div>
                             <button type="button" role="button" onclick="deleteMatchDirect(${i})" 
@@ -1783,10 +2560,10 @@
                                 ${g.matches?.length > 0 ? `
                                     <h4 style="margin-top:16px; margin-bottom:8px; color:var(--text-secondary);">대진표 (${g.matches.length}경기)</h4>
                                     ${g.matches.map((m, mi) => `
-                                        <div style="padding:8px; margin:4px 0; background:${m.status === 'finished' ? '#e8f5e9' : '#fff3e0'}; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">
+                                        <div style="padding:8px; margin:4px 0; background:${m.status === 'completed' ? '#e8f5e9' : '#fff3e0'}; border-radius:4px; display:flex; justify-content:space-between; align-items:center;">
                                             <span>${m.player1} vs ${m.player2}</span>
                                             <span style="font-size:12px; color:var(--text-secondary);">
-                                                ${m.status === 'finished' ? `✅ ${m.result?.player1Sets || 0}:${m.result?.player2Sets || 0}` : '⏳ 대기'}
+                                                ${m.status === 'completed' ? `✅ ${m.result?.player1Sets || 0}:${m.result?.player2Sets || 0}` : '⏳ 대기'}
                                             </span>
                                         </div>
                                     `).join('')}
@@ -2241,7 +3018,7 @@
             }
             
             // 완료된 경기는 기록만 표시
-            if (currentMatch.status === 'finished') {
+            if (currentMatch.status === 'completed') {
                 renderFinishedMatch();
                 return;
             }
@@ -2277,21 +3054,37 @@
                         </div>
                     </div>
                     
-                    <!-- 실시간 점수 영역 (aria-live) -->
+                    <!-- 실시간 점수 영역 (aria-live) - 서브권 가진 선수가 왼쪽 -->
                     <div aria-live="polite" aria-atomic="true" id="live-score-region">
+                        ${currentMatch.currentServe === 'player1' ? `
                         <div class="score-grid">
-                            <div class="player-score">
-                                <div class="player-name">${currentMatch.player1Name}</div>
+                            <div class="player-score" style="border:3px solid var(--primary); border-radius:12px;">
+                                <div class="player-name">🎾 ${currentMatch.player1Name}</div>
                                 <div class="score-display" aria-label="${currentMatch.player1Name} ${set.player1}점">${set.player1}</div>
                                 ${currentMatch.team1Lineup ? `<div style="font-size:12px; color:var(--text-secondary); margin-top:8px;">${currentMatch.team1Lineup.join(', ')}</div>` : ''}
                             </div>
-                            <div style="font-size:24px; font-weight:700; color:var(--text-secondary)">VS</div>
+                            <div style="font-size:24px; font-weight:700; color:var(--text-secondary)">:</div>
                             <div class="player-score">
                                 <div class="player-name">${currentMatch.player2Name}</div>
                                 <div class="score-display" aria-label="${currentMatch.player2Name} ${set.player2}점">${set.player2}</div>
                                 ${currentMatch.team2Lineup ? `<div style="font-size:12px; color:var(--text-secondary); margin-top:8px;">${currentMatch.team2Lineup.join(', ')}</div>` : ''}
                             </div>
                         </div>
+                        ` : `
+                        <div class="score-grid">
+                            <div class="player-score" style="border:3px solid var(--primary); border-radius:12px;">
+                                <div class="player-name">🎾 ${currentMatch.player2Name}</div>
+                                <div class="score-display" aria-label="${currentMatch.player2Name} ${set.player2}점">${set.player2}</div>
+                                ${currentMatch.team2Lineup ? `<div style="font-size:12px; color:var(--text-secondary); margin-top:8px;">${currentMatch.team2Lineup.join(', ')}</div>` : ''}
+                            </div>
+                            <div style="font-size:24px; font-weight:700; color:var(--text-secondary)">:</div>
+                            <div class="player-score">
+                                <div class="player-name">${currentMatch.player1Name}</div>
+                                <div class="score-display" aria-label="${currentMatch.player1Name} ${set.player1}점">${set.player1}</div>
+                                ${currentMatch.team1Lineup ? `<div style="font-size:12px; color:var(--text-secondary); margin-top:8px;">${currentMatch.team1Lineup.join(', ')}</div>` : ''}
+                            </div>
+                        </div>
+                        `}
                     </div>
                     
                     <!-- 최근 득점 실시간 알림 -->
@@ -2300,11 +3093,35 @@
                     </div>
                     
                     <div style="text-align:center; padding:12px; background:var(--bg-secondary); border-radius:8px; margin-bottom:16px;">
-                        <div class="serve-indicator">🎾 ${currentMatch.currentServe === 'player1' ? currentMatch.player1Name : currentMatch.player2Name} - 서브 ${currentMatch.serveCount + 1}회차</div>
-                        ${isAuthenticated ? `
-                            <button class="btn" onclick="changeServe()" style="margin-top:8px; font-size:12px; padding:6px 12px;">🔄 서브권 변경</button>
-                        ` : ''}
+                        ${currentMatch.serveSelected === false && isAuthenticated ? `
+                            <div style="margin-bottom:12px; font-weight:600;">🎾 첫 서브 선택</div>
+                            <div style="display:flex; gap:8px; justify-content:center;">
+                                <button class="btn btn-primary" onclick="selectFirstServe('player1')" style="flex:1;">${currentMatch.player1Name}</button>
+                                <button class="btn btn-primary" onclick="selectFirstServe('player2')" style="flex:1;">${currentMatch.player2Name}</button>
+                            </div>
+                        ` : `
+                            <div class="serve-indicator">🎾 ${currentMatch.currentServe === 'player1' ? currentMatch.player1Name : currentMatch.player2Name} - 서브 ${currentMatch.serveCount + 1}회차</div>
+                            ${isAuthenticated ? `
+                                <button class="btn" onclick="changeServe()" style="margin-top:8px; font-size:12px; padding:6px 12px;">🔄 서브권 변경</button>
+                            ` : ''}
+                        `}
                     </div>
+                    
+                    ${isAuthenticated && !warmupActive ? `
+                        <div style="text-align:center; margin-bottom:16px;">
+                            <button class="btn" onclick="startWarmup()" style="background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%); color:white;">
+                                🔥 워밍업 1분 시작
+                            </button>
+                        </div>
+                    ` : ''}
+                    
+                    ${warmupActive ? `
+                        <div style="text-align:center; padding:16px; background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%); color:white; border-radius:8px; margin-bottom:16px;">
+                            <h3 style="margin:0; color:white;">🔥 워밍업 진행 중</h3>
+                            <div style="font-size:36px; font-weight:700; margin:8px 0;" id="warmup-timer">${Math.floor(warmupSeconds / 60)}:${(warmupSeconds % 60).toString().padStart(2, '0')}</div>
+                            <button class="btn" onclick="stopWarmup()" style="background:white; color:#ff5722;">워밍업 종료</button>
+                        </div>
+                    ` : ''}
                     
                     ${isPaused ? `
                         <div style="text-align:center; padding:16px; background:var(--warning); color:white; border-radius:8px; margin-bottom:16px;">
@@ -2315,6 +3132,7 @@
                         </div>
                     ` : ''}
                     
+                    ${isAuthenticated ? `
                     <h3 style="margin-bottom:8px;">⏱️ 타임아웃</h3>
                     <div class="timeout-section">
                         <button class="timeout-btn" onclick="startTimeout('player1')" ${currentMatch.timeouts.player1 === 0 || isTimeoutActive ? 'disabled' : ''}>
@@ -2372,13 +3190,13 @@
                         </button>
                     </div>
                     
-                    <!-- 골영역 방어 Illegal Defense -->
+                    <!-- 일리걸 디펜스 Illegal Defense -->
                     <div class="foul-grid">
-                        <button class="foul-btn" onclick="addScore('player2', 1, '${currentMatch.player1Name} 골영역방어')" ${isTimeoutActive || isPaused ? 'disabled' : ''}>
-                            ${currentMatch.player1Name}<br>골영역방어
+                        <button class="foul-btn" onclick="addScore('player2', 1, '${currentMatch.player1Name} 일리걸디펜스')" ${isTimeoutActive || isPaused ? 'disabled' : ''}>
+                            ${currentMatch.player1Name}<br>일리걸디펜스
                         </button>
-                        <button class="foul-btn" onclick="addScore('player1', 1, '${currentMatch.player2Name} 골영역방어')" ${isTimeoutActive || isPaused ? 'disabled' : ''}>
-                            ${currentMatch.player2Name}<br>골영역방어
+                        <button class="foul-btn" onclick="addScore('player1', 1, '${currentMatch.player2Name} 일리걸디펜스')" ${isTimeoutActive || isPaused ? 'disabled' : ''}>
+                            ${currentMatch.player2Name}<br>일리걸디펜스
                         </button>
                     </div>
                     
@@ -2392,33 +3210,13 @@
                         </button>
                     </div>
                     
-                    <!-- 침범 Invasion -->
+                    <!-- 볼 홀딩 Ball Infraction (2초 이상) -->
                     <div class="foul-grid">
-                        <button class="foul-btn" onclick="addScore('player2', 1, '${currentMatch.player1Name} 침범')" ${isTimeoutActive || isPaused ? 'disabled' : ''}>
-                            ${currentMatch.player1Name}<br>침범
+                        <button class="foul-btn" onclick="addScore('player2', 1, '${currentMatch.player1Name} 볼홀딩')" ${isTimeoutActive || isPaused ? 'disabled' : ''}>
+                            ${currentMatch.player1Name}<br>볼홀딩(2초)
                         </button>
-                        <button class="foul-btn" onclick="addScore('player1', 1, '${currentMatch.player2Name} 침범')" ${isTimeoutActive || isPaused ? 'disabled' : ''}>
-                            ${currentMatch.player2Name}<br>침범
-                        </button>
-                    </div>
-                    
-                    <!-- 배트 파울 Bat Infraction -->
-                    <div class="foul-grid">
-                        <button class="foul-btn" onclick="addScore('player2', 1, '${currentMatch.player1Name} 배트파울')" ${isTimeoutActive || isPaused ? 'disabled' : ''}>
-                            ${currentMatch.player1Name}<br>배트파울
-                        </button>
-                        <button class="foul-btn" onclick="addScore('player1', 1, '${currentMatch.player2Name} 배트파울')" ${isTimeoutActive || isPaused ? 'disabled' : ''}>
-                            ${currentMatch.player2Name}<br>배트파울
-                        </button>
-                    </div>
-                    
-                    <!-- 볼 파울 Ball Infraction (2초 이상) -->
-                    <div class="foul-grid">
-                        <button class="foul-btn" onclick="addScore('player2', 1, '${currentMatch.player1Name} 볼파울')" ${isTimeoutActive || isPaused ? 'disabled' : ''}>
-                            ${currentMatch.player1Name}<br>볼파울(2초)
-                        </button>
-                        <button class="foul-btn" onclick="addScore('player1', 1, '${currentMatch.player2Name} 볼파울')" ${isTimeoutActive || isPaused ? 'disabled' : ''}>
-                            ${currentMatch.player2Name}<br>볼파울(2초)
+                        <button class="foul-btn" onclick="addScore('player1', 1, '${currentMatch.player2Name} 볼홀딩')" ${isTimeoutActive || isPaused ? 'disabled' : ''}>
+                            ${currentMatch.player2Name}<br>볼홀딩(2초)
                         </button>
                     </div>
                     
@@ -2464,6 +3262,14 @@
                             return wouldWin ? '경기 종료' : '세트 종료';
                         })()}</button>
                     </div>
+                    ` : `
+                    <!-- 관람 모드 안내 -->
+                    <div style="text-align:center; padding:24px; background:var(--bg-secondary); border-radius:12px; margin-top:16px;">
+                        <span style="font-size:48px;">👁️</span>
+                        <h3 style="margin:12px 0;">관람 모드</h3>
+                        <p style="color:var(--text-secondary);">실시간으로 점수가 업데이트됩니다.</p>
+                    </div>
+                    `}
                     
                     ${isAuthenticated ? `
                         <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--border);">
@@ -2658,6 +3464,27 @@
         }
         
         // 대회 유형 변경 시
+        // 대회 유형 카드 선택
+        function selectTournamentType(type) {
+            // 숨겨진 input 값 설정
+            document.getElementById('tournament-type').value = type;
+            
+            // 카드 스타일 업데이트
+            const cards = document.querySelectorAll('.tournament-type-btn');
+            cards.forEach(card => {
+                if (card.dataset.type === type) {
+                    card.style.borderColor = 'var(--primary)';
+                    card.style.background = '#e3f2fd';
+                } else {
+                    card.style.borderColor = '#ddd';
+                    card.style.background = 'white';
+                }
+            });
+            
+            // 설정 패널 표시/숨김
+            onTournamentTypeChange();
+        }
+        
         function onTournamentTypeChange() {
             const type = document.getElementById('tournament-type').value;
             document.getElementById('group-settings').style.display = 
@@ -2859,6 +3686,7 @@
                 setScores: [{player1: 0, player2: 0}],
                 currentServe: 'player1',
                 serveCount: 0,
+                serveSelected: false, // 서브 미선택 상태
                 timeouts: {
                     player1: 1,
                     player2: 1
@@ -2912,7 +3740,7 @@
             currentMatch = currentProject.matches[index];
             
             // 완료된 경기는 인증 불필요
-            if (currentMatch.status === 'finished') {
+            if (currentMatch.status === 'completed') {
                 isAuthenticated = false;
                 screen = 'match';
                 render();
@@ -2950,7 +3778,17 @@
             }
         }
 
+        let lastScoreTime = 0; // 더블클릭 방지
+        
         function addScore(player, points, type) {
+            // 더블클릭 방지 (500ms 이내 재클릭 무시)
+            const now = Date.now();
+            if (now - lastScoreTime < 500) {
+                console.log('더블클릭 방지');
+                return;
+            }
+            lastScoreTime = now;
+            
             // 인증 확인
             if (!isAuthenticated) {
                 alert('❌ 심판만 득점을 입력할 수 있습니다');
@@ -2997,10 +3835,13 @@
             saveProjects();
             renderMatch();
             
-            // aria-live 실시간 안내 (간단하게)
+            // aria-live 실시간 안내 (서브권 기준 스코어 순서)
             const nextServer = currentMatch.currentServe === 'player1' ? currentMatch.player1Name : currentMatch.player2Name;
             const nextServeCount = currentMatch.serveCount + 1;
-            const announcement = `${type}, ${points}점. ${currentMatch.player1Name} ${set.player1}, ${currentMatch.player2Name} ${set.player2}. 다음 서브 ${nextServer}`;
+            // 서브권 가진 선수 스코어를 먼저
+            const serverScore = currentMatch.currentServe === 'player1' ? set.player1 : set.player2;
+            const receiverScore = currentMatch.currentServe === 'player1' ? set.player2 : set.player1;
+            const announcement = `${playerName} ${points}점. 스코어 ${serverScore} 대 ${receiverScore}. ${nextServer} ${nextServeCount}번째 서브`;
             announce(announcement);
             
             // 사이드 체인지 체크
@@ -3137,16 +3978,35 @@
             
             if (matchWinner) {
                 // 경기 종료!
-                currentMatch.status = 'finished';
+                currentMatch.status = 'completed';
+                currentMatch.winner = matchWinner;
                 currentMatch.finishedAt = new Date().toISOString();
                 announce(`경기 종료! ${matchWinner} 승리! (세트 ${player1SetWins}:${player2SetWins})`);
+                
+                // 연습 경기인 경우 별도 결과 화면으로
+                if (currentMatch.isPractice || currentProject?.isPractice) {
+                    // 자동 저장 (silent)
+                    savePracticeResult(true);
+                    goTo('practice-result');
+                    return;
+                }
+                
+                // 토너먼트 진행 처리
+                processTournamentProgression(currentMatch, matchWinner);
+                
                 saveProjects();
                 goTo('project-detail');
             } else {
                 // 다음 세트로
                 const prevSet = currentMatch.currentSet;
                 currentMatch.currentSet++;
-                currentMatch.setScores.push({player1: 0, player2: 0});
+                // 다음 세트가 없으면 추가
+                if (!currentMatch.setScores[currentMatch.currentSet - 1]) {
+                    currentMatch.setScores.push({player1: 0, player2: 0});
+                } else {
+                    // 이미 있으면 초기화
+                    currentMatch.setScores[currentMatch.currentSet - 1] = {player1: 0, player2: 0};
+                }
                 currentMatch.serveCount = 0;
                 currentMatch.sideChangeUsed = false; // 사이드 체인지 리셋
                 // 개인전만 세트마다 타임아웃 리셋 (팀전은 단판이므로 리셋 없음)
@@ -3780,6 +4640,7 @@
                         timeouts: { player1: 1, player2: 1 },
                         currentServe: 'player1',
                         serveCount: 0,
+                        serveSelected: false,
                         mainReferee: '',
                         bracketMatchId: bMatch.matchId,
                         tournamentRound: bracket.currentRound + 1
@@ -3817,13 +4678,13 @@
                     const winner = match.winner?.name;
                     
                     html += `
-                        <div style="padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:8px; border-left:4px solid ${match.status === 'finished' ? 'var(--success)' : 'var(--warning)'};">
+                        <div style="padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:8px; border-left:4px solid ${match.status === 'completed' ? 'var(--success)' : 'var(--warning)'};">
                             <div style="display:flex; justify-content:space-between; align-items:center;">
                                 <span style="${winner === p1 ? 'font-weight:700; color:var(--success);' : ''}">${p1}</span>
                                 <span style="color:var(--text-secondary);">vs</span>
                                 <span style="${winner === p2 ? 'font-weight:700; color:var(--success);' : ''}">${p2}</span>
                             </div>
-                            ${match.status === 'finished' ? `<div style="text-align:center; margin-top:8px; color:var(--success); font-size:12px;">🏆 승자: ${winner}</div>` : ''}
+                            ${match.status === 'completed' ? `<div style="text-align:center; margin-top:8px; color:var(--success); font-size:12px;">🏆 승자: ${winner}</div>` : ''}
                         </div>
                     `;
                 });
@@ -3840,7 +4701,7 @@
             if (!bracket) return;
             
             const currentRound = bracket.rounds[bracket.currentRound];
-            const allFinished = currentRound.every(m => m.status === 'finished');
+            const allFinished = currentRound.every(m => m.status === 'completed');
             
             if (!allFinished) {
                 alert('현재 라운드의 모든 경기가 완료되지 않았습니다.');
@@ -3887,7 +4748,7 @@
             
             // 완료된 경기에서 통계 수집
             const matches = currentProject.matches?.filter(m => 
-                m.status === 'finished' && 
+                m.status === 'completed' && 
                 playerStats[m.player1Name] && playerStats[m.player2Name]
             ) || [];
             
@@ -3957,7 +4818,7 @@
             // 토너먼트 최종 순위
             if (currentProject.bracket?.rounds) {
                 const lastRound = currentProject.bracket.rounds[currentProject.bracket.rounds.length - 1];
-                if (lastRound?.length === 1 && lastRound[0].status === 'finished') {
+                if (lastRound?.length === 1 && lastRound[0].status === 'completed') {
                     result.final.push(lastRound[0].winner);
                     // 준우승
                     const loser = lastRound[0].player1.name === lastRound[0].winner.name ? 
@@ -3974,13 +4835,13 @@
             const matches = currentProject.matches || [];
             const stats = {
                 totalMatches: matches.length,
-                completedMatches: matches.filter(m => m.status === 'finished').length,
+                completedMatches: matches.filter(m => m.status === 'completed').length,
                 playerStats: []
             };
             
             const playerData = {};
             
-            matches.filter(m => m.status === 'finished').forEach(m => {
+            matches.filter(m => m.status === 'completed').forEach(m => {
                 [m.player1Name, m.player2Name].forEach((name, idx) => {
                     if (!playerData[name]) {
                         playerData[name] = {
@@ -4271,7 +5132,7 @@
                             }
                             
                             let resultStr = `${m.player1} vs ${m.player2}`;
-                            if (m.status === 'finished' && m.result) {
+                            if (m.status === 'completed' && m.result) {
                                 const winner = m.result.winner;
                                 const score = m.result.score1 ? 
                                     `${m.result.score1}:${m.result.score2}` : 
@@ -4418,7 +5279,7 @@
                     y += 15;
                     
                     // 승자
-                    if (match.status === 'finished' && match.winner) {
+                    if (match.status === 'completed' && match.winner) {
                         doc.setFillColor(255, 215, 0);
                         doc.rect(60, y, pageWidth - 120, 12, 'F');
                         doc.setFontSize(12);
@@ -6000,7 +6861,7 @@
             if (hasGroups) {
                 const totalMatches = p.groups.reduce((sum, g) => sum + (g.matches?.length || 0), 0);
                 const finishedMatches = p.groups.reduce((sum, g) => 
-                    sum + (g.matches?.filter(m => m.status === 'finished').length || 0), 0);
+                    sum + (g.matches?.filter(m => m.status === 'completed').length || 0), 0);
                 
                 html += `<div style="padding:16px; background:var(--bg-secondary); border-radius:8px;">`;
                 html += `<h3 style="margin-bottom:12px;">📈 진행 상황</h3>`;
@@ -6066,7 +6927,7 @@
                     if (gm?.matches?.length > 0) {
                         html += '<details style="margin-top:12px;"><summary style="cursor:pointer; font-size:12px; padding:4px 8px; background:#e8f5e9; border-radius:4px;">📋 경기 결과 (' + gm.matches.length + '경기)</summary>';
                         html += '<div style="margin-top:8px;">';
-                        gm.matches.forEach(function(m) {
+                        gm.matches.forEach(function(m, mi) {
                             const winColor = '#2e7d32';
                             html += '<div style="padding:10px; margin:4px 0; background:#f5f5f5; border-radius:6px; border-left:3px solid ' + winColor + ';">';
                             html += '<div style="display:flex; justify-content:space-between; align-items:center;">';
@@ -6081,6 +6942,18 @@
                                     html += '<span style="background:white; padding:2px 6px; border-radius:3px; margin:2px;">' + (i+1) + '세트 ' + s.s1 + '-' + s.s2 + '</span> ';
                                 });
                                 html += '</div>';
+                            }
+                            // 상세 경기 기록 (history)
+                            if (m.history?.length > 0) {
+                                html += '<details style="margin-top:8px;"><summary style="cursor:pointer; font-size:11px; color:#666;">📊 상세 득점 기록 (' + m.history.length + '점)</summary>';
+                                html += '<div style="max-height:200px; overflow-y:auto; margin-top:4px; padding:8px; background:white; border-radius:4px;">';
+                                m.history.forEach(function(h, hi) {
+                                    html += '<div style="padding:4px 8px; margin:2px 0; font-size:11px; background:#fafafa; border-radius:3px; display:flex; justify-content:space-between;">';
+                                    html += '<span>' + (hi+1) + '. ' + h.player + (h.set ? ' (세트' + h.set + ')' : '') + '</span>';
+                                    html += '<span style="color:#1976d2;">+' + h.points + '점 → ' + h.scoreAfter + '</span>';
+                                    html += '</div>';
+                                });
+                                html += '</div></details>';
                             }
                             html += '</div>';
                         });
@@ -6139,7 +7012,7 @@
                     html += `<details style="margin-top:12px;"><summary style="cursor:pointer; font-size:12px; padding:4px 8px; background:#e8f5e9; border-radius:4px;">📋 경기 결과 (${group.matches.length}경기)</summary>`;
                     html += `<div style="margin-top:8px;">`;
                     group.matches.forEach((m, mi) => {
-                        const isFinished = m.status === 'finished';
+                        const isFinished = m.status === 'completed';
                         const statusIcon = isFinished ? '✅' : '⏳';
                         let result = '대기중';
                         let winner = null;
@@ -6236,9 +7109,31 @@
                     
                     html += `<div style="padding:12px; margin:8px 0; background:${bg}; border-radius:8px;">`;
                     html += `<strong>${round.round}</strong> (${round.sets}세트)<br>`;
-                    round.matches.forEach(m => {
-                        html += `<div style="padding:4px 0;">`;
-                        html += `${m.p1} vs ${m.p2}: <strong>${m.winner}</strong> (${m.score})`;
+                    round.matches.forEach((m, mi) => {
+                        html += `<div style="padding:8px; margin:4px 0; background:white; border-radius:6px;">`;
+                        html += `<div style="display:flex; justify-content:space-between; align-items:center;">`;
+                        html += `<span>${m.p1} vs ${m.p2}</span>`;
+                        html += `<strong style="color:#2e7d32;">${m.winner} (${m.score})</strong>`;
+                        html += `</div>`;
+                        if (m.setScores?.length > 0) {
+                            html += `<div style="font-size:11px; margin-top:4px;">세트별: `;
+                            m.setScores.forEach((s, si) => {
+                                html += `<span style="background:#f5f5f5; padding:2px 6px; border-radius:3px; margin:2px;">${si+1}세트 ${s.s1}-${s.s2}</span> `;
+                            });
+                            html += `</div>`;
+                        }
+                        // 상세 경기 기록
+                        if (m.history?.length > 0) {
+                            html += `<details style="margin-top:8px;"><summary style="cursor:pointer; font-size:11px; color:#666;">📊 상세 득점 기록 (${m.history.length}점)</summary>`;
+                            html += `<div style="max-height:200px; overflow-y:auto; margin-top:4px; padding:8px; background:#fafafa; border-radius:4px;">`;
+                            m.history.forEach((h, hi) => {
+                                html += `<div style="padding:4px 8px; margin:2px 0; font-size:11px; background:white; border-radius:3px; display:flex; justify-content:space-between;">`;
+                                html += `<span>${hi+1}. ${h.player}${h.set ? ' (세트' + h.set + ')' : ''}</span>`;
+                                html += `<span style="color:#1976d2;">+${h.points}점 → ${h.scoreAfter}</span>`;
+                                html += `</div>`;
+                            });
+                            html += `</div></details>`;
+                        }
                         html += `</div>`;
                     });
                     html += `</div>`;
@@ -6257,7 +7152,7 @@
                     html += `<strong>${roundName}</strong><br>`;
                     round.forEach(m => {
                         if (m.player1?.isBye || m.player2?.isBye) return;
-                        const statusIcon = m.status === 'finished' ? '✅' : '⏳';
+                        const statusIcon = m.status === 'completed' ? '✅' : '⏳';
                         html += `<div style="padding:4px 0;">`;
                         html += `${statusIcon} ${m.player1?.name || '?'} vs ${m.player2?.name || '?'}`;
                         if (m.winner) html += ` → <strong>${m.winner.name}</strong>`;
@@ -6512,6 +7407,1100 @@
         
         // ========== 대진 관리 함수 끝 ==========
 
+        // ========== 대회 대진 위자드 함수 ==========
+        function twNextStep() {
+            const tw = window.tournamentWizard;
+            
+            // 유효성 검사
+            if (tw.step === 1) {
+                const name = document.getElementById('tw-name')?.value.trim();
+                if (!name) {
+                    alert('대회명을 입력해주세요.');
+                    return;
+                }
+                tw.info.name = name;
+                tw.info.date = document.getElementById('tw-date')?.value || '';
+                tw.info.location = document.getElementById('tw-location')?.value.trim() || '';
+            } else if (tw.step === 2) {
+                if (tw.participants.length < 2) {
+                    alert('최소 2명 이상의 참가자가 필요합니다.');
+                    return;
+                }
+            } else if (tw.step === 4) {
+                // 설정 유효성 검사
+                if (tw.format === 'group-knockout') {
+                    const advanceTotal = tw.groupSettings.groupCount * tw.groupSettings.advanceCount;
+                    if (advanceTotal > tw.knockoutSettings.size) {
+                        alert(`진출자 수(${advanceTotal}명)가 토너먼트 규모(${tw.knockoutSettings.size}강)보다 많습니다.`);
+                        return;
+                    }
+                }
+            }
+            
+            tw.step++;
+            
+            // Step 5 진입 시 대진표 생성
+            if (tw.step === 5) {
+                generateTWBracket();
+            }
+            
+            render();
+        }
+        
+        function twPrevStep() {
+            const tw = window.tournamentWizard;
+            if (tw.step > 1) {
+                tw.step--;
+                render();
+            }
+        }
+        
+        function addTWParticipant() {
+            const tw = window.tournamentWizard;
+            const input = document.getElementById('tw-participant');
+            const value = input?.value.trim();
+            
+            if (!value) return;
+            
+            // 쉼표로 구분된 여러 명 처리
+            const names = value.split(',').map(n => n.trim()).filter(n => n);
+            names.forEach(name => {
+                if (!tw.participants.includes(name)) {
+                    tw.participants.push(name);
+                }
+            });
+            
+            input.value = '';
+            render();
+        }
+        
+        function removeTWParticipant(index) {
+            window.tournamentWizard.participants.splice(index, 1);
+            render();
+        }
+        
+        function clearTWParticipants() {
+            if (confirm('모든 참가자를 삭제하시겠습니까?')) {
+                window.tournamentWizard.participants = [];
+                render();
+            }
+        }
+        
+        function setTWFormat(format) {
+            window.tournamentWizard.format = format;
+            render();
+        }
+        
+        function updateTWSettings() {
+            const tw = window.tournamentWizard;
+            
+            const groupCount = parseInt(document.getElementById('tw-group-count')?.value) || 4;
+            const advanceCount = parseInt(document.getElementById('tw-advance')?.value) || 2;
+            const knockoutSize = parseInt(document.getElementById('tw-knockout-size')?.value) || 8;
+            
+            tw.groupSettings.groupCount = groupCount;
+            tw.groupSettings.advanceCount = advanceCount;
+            tw.groupSettings.perGroup = Math.ceil(tw.participants.length / groupCount);
+            tw.knockoutSettings.size = knockoutSize;
+            
+            updateTWSettingsSummary();
+        }
+        
+        function updateTWSettingsSummary() {
+            const tw = window.tournamentWizard;
+            const summary = document.getElementById('tw-settings-summary');
+            const validation = document.getElementById('tw-knockout-validation');
+            
+            if (!summary) return;
+            
+            const unitName = tw.info.type === 'team' ? '팀' : '명';
+            let html = `<p>• 참가자: ${tw.participants.length}${unitName}</p>`;
+            
+            if (tw.format !== 'knockout-only') {
+                html += `<p>• 조 편성: ${tw.groupSettings.groupCount}개 조 (조당 약 ${tw.groupSettings.perGroup}${unitName})</p>`;
+            }
+            
+            if (tw.format === 'group-knockout') {
+                const advanceTotal = tw.groupSettings.groupCount * tw.groupSettings.advanceCount;
+                html += `<p>• 본선 진출: 각 조 상위 ${tw.groupSettings.advanceCount}${unitName} (총 ${advanceTotal}${unitName})</p>`;
+                html += `<p>• 본선: ${tw.knockoutSettings.size}강 토너먼트</p>`;
+                
+                if (validation) {
+                    if (advanceTotal > tw.knockoutSettings.size) {
+                        validation.innerHTML = `<span style="color:#d32f2f;">❌ 진출자(${advanceTotal}${unitName})가 토너먼트 규모(${tw.knockoutSettings.size}강)보다 많습니다!</span>`;
+                    } else if (advanceTotal < tw.knockoutSettings.size) {
+                        validation.innerHTML = `<span style="color:#ff9800;">⚠️ 부전승 ${tw.knockoutSettings.size - advanceTotal}${unitName} 발생</span>`;
+                    } else {
+                        validation.innerHTML = `<span style="color:#4caf50;">✅ 딱 맞습니다!</span>`;
+                    }
+                }
+            } else if (tw.format === 'knockout-only') {
+                html += `<p>• ${tw.knockoutSettings.size}강 토너먼트</p>`;
+            }
+            
+            summary.innerHTML = html;
+        }
+        
+        function generateTWBracket() {
+            const tw = window.tournamentWizard;
+            const participants = [...tw.participants];
+            
+            // 참가자 섞기
+            for (let i = participants.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [participants[i], participants[j]] = [participants[j], participants[i]];
+            }
+            
+            // 조 편성
+            if (tw.format !== 'knockout-only') {
+                const groupCount = tw.groupSettings.groupCount;
+                tw.groups = Array(groupCount).fill(null).map(() => []);
+                
+                // 스네이크 드래프트 방식으로 배정
+                participants.forEach((p, idx) => {
+                    const round = Math.floor(idx / groupCount);
+                    const groupIdx = round % 2 === 0 ? idx % groupCount : groupCount - 1 - (idx % groupCount);
+                    tw.groups[groupIdx].push(p);
+                });
+            }
+            
+            // 토너먼트 대진표 (나중에 진출자로 채움)
+            if (tw.format === 'knockout-only') {
+                tw.bracket = {
+                    size: tw.knockoutSettings.size,
+                    participants: participants.slice(0, tw.knockoutSettings.size),
+                    matches: []
+                };
+            }
+        }
+        
+        function generateTWPreview() {
+            const tw = window.tournamentWizard;
+            let html = '';
+            
+            // 조별 리그 미리보기
+            if (tw.format !== 'knockout-only' && tw.groups.length > 0) {
+                html += `<h4 style="margin:0 0 12px 0;">📊 조별 리그</h4>`;
+                html += `<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:20px;">`;
+                
+                tw.groups.forEach((group, idx) => {
+                    const groupName = String.fromCharCode(65 + idx); // A, B, C, ...
+                    html += `
+                        <div style="background:#f5f5f5; padding:12px; border-radius:8px;">
+                            <div style="font-weight:600; margin-bottom:8px; color:#1976d2;">${groupName}조 (${group.length}명)</div>
+                            ${group.map((p, i) => `<div style="font-size:13px; padding:4px 0;">${i+1}. ${p}</div>`).join('')}
+                        </div>
+                    `;
+                });
+                
+                html += `</div>`;
+                
+                // 조별 경기 수 계산
+                const matchesPerGroup = tw.groups.map(g => g.length * (g.length - 1) / 2);
+                const totalGroupMatches = matchesPerGroup.reduce((a, b) => a + b, 0);
+                html += `<p style="font-size:13px; color:#666;">조별 리그 총 ${totalGroupMatches}경기</p>`;
+            }
+            
+            // 토너먼트 미리보기
+            if (tw.format === 'group-knockout') {
+                const advanceTotal = tw.groupSettings.groupCount * tw.groupSettings.advanceCount;
+                html += `
+                    <h4 style="margin:20px 0 12px 0;">🥊 본선 토너먼트</h4>
+                    <div style="background:#fff3e0; padding:12px; border-radius:8px;">
+                        <p style="margin:0;">• ${tw.knockoutSettings.size}강 토너먼트</p>
+                        <p style="margin:4px 0 0 0;">• 각 조 상위 ${tw.groupSettings.advanceCount}명 진출 (총 ${advanceTotal}명)</p>
+                        <p style="margin:4px 0 0 0; font-size:13px; color:#666;">※ 조별 리그 완료 후 대진표 확정</p>
+                    </div>
+                `;
+            } else if (tw.format === 'knockout-only') {
+                html += `<h4 style="margin:0 0 12px 0;">🥊 토너먼트 대진표</h4>`;
+                html += `<div style="background:#fff3e0; padding:12px; border-radius:8px;">`;
+                html += `<p style="margin:0;">${tw.knockoutSettings.size}강 토너먼트</p>`;
+                
+                const bracket = tw.bracket;
+                if (bracket && bracket.participants) {
+                    html += `<div style="margin-top:12px;">`;
+                    for (let i = 0; i < bracket.participants.length; i += 2) {
+                        const p1 = bracket.participants[i] || 'BYE';
+                        const p2 = bracket.participants[i + 1] || 'BYE';
+                        html += `<div style="font-size:13px; padding:6px 0; border-bottom:1px solid #eee;">${i/2+1}경기: ${p1} vs ${p2}</div>`;
+                    }
+                    html += `</div>`;
+                }
+                html += `</div>`;
+            }
+            
+            return html;
+        }
+        
+        function confirmTournament() {
+            const tw = window.tournamentWizard;
+            
+            if (!confirm('대진표를 확정하고 대회를 생성하시겠습니까?')) return;
+            
+            // 프로젝트 생성
+            const project = {
+                id: Date.now(),
+                name: tw.info.name,
+                date: tw.info.date,
+                location: tw.info.location,
+                competitionType: tw.info.type,
+                players: tw.info.type === 'individual' ? tw.participants : [],
+                teams: tw.info.type === 'team' ? tw.participants.map(t => ({ name: t, players: [] })) : [],
+                tournamentType: tw.format,
+                groups: [],
+                matches: [],
+                bracket: tw.bracket,
+                createdAt: new Date().toISOString()
+            };
+            
+            // 조별 리그 설정
+            if (tw.format !== 'knockout-only') {
+                project.groups = tw.groups.map((members, idx) => ({
+                    name: String.fromCharCode(65 + idx) + '조',
+                    members: members,
+                    matches: [],
+                    standings: []
+                }));
+                
+                // 조별 리그 경기 생성
+                project.groups.forEach((group, gIdx) => {
+                    const members = group.members;
+                    for (let i = 0; i < members.length; i++) {
+                        for (let j = i + 1; j < members.length; j++) {
+                            const match = {
+                                id: Date.now() + gIdx * 1000 + i * 100 + j,
+                                player1Name: members[i],
+                                player2Name: members[j],
+                                type: tw.info.type,
+                                sets: tw.info.type === 'individual' ? 3 : 1,
+                                winScore: tw.info.type === 'individual' ? 11 : 31,
+                                currentSet: 1,
+                                setScores: [{ player1: 0, player2: 0 }],
+                                currentServe: 'player1',
+                                serveCount: 0,
+                                serveSelected: false,
+                                timeouts: { player1: 1, player2: 1 },
+                                history: [],
+                                status: 'pending',
+                                groupIndex: gIdx,
+                                groupName: group.name,
+                                refereePin: generatePin()
+                            };
+                            project.matches.push(match);
+                            group.matches.push(match.id);
+                        }
+                    }
+                });
+            }
+            
+            // 토너먼트만인 경우 바로 경기 생성
+            if (tw.format === 'knockout-only' && tw.bracket) {
+                for (let i = 0; i < tw.bracket.participants.length; i += 2) {
+                    const p1 = tw.bracket.participants[i];
+                    const p2 = tw.bracket.participants[i + 1];
+                    
+                    if (p1 && p2) {
+                        const match = {
+                            id: Date.now() + i,
+                            player1Name: p1,
+                            player2Name: p2,
+                            type: tw.info.type,
+                            sets: tw.info.type === 'individual' ? 3 : 1,
+                            winScore: tw.info.type === 'individual' ? 11 : 31,
+                            currentSet: 1,
+                            setScores: [{ player1: 0, player2: 0 }],
+                            currentServe: 'player1',
+                            serveCount: 0,
+                            serveSelected: false,
+                            timeouts: { player1: 1, player2: 1 },
+                            history: [],
+                            status: 'pending',
+                            bracketRound: 1,
+                            bracketMatchNum: i / 2 + 1,
+                            refereePin: generatePin()
+                        };
+                        project.matches.push(match);
+                    }
+                }
+            }
+            
+            // 프로젝트 저장
+            projects.push(project);
+            saveProjects();
+            
+            // 위자드 초기화
+            window.tournamentWizard = null;
+            
+            // 생성된 프로젝트로 이동
+            currentProject = project;
+            announce(`${project.name} 대회가 생성되었습니다. ${project.matches.length}경기`);
+            goTo('bracket-detail');
+        }
+        
+        function generatePin() {
+            return Math.random().toString().slice(2, 6);
+        }
+        
+        // ========== 대진 설정 모드 함수 ==========
+        let bracketModeAuth = false;
+        
+        function enterBracketMode() {
+            const savedPin = localStorage.getItem('bracketPin');
+            if (!savedPin) {
+                // 비밀번호 미설정 - 설정 화면으로
+                goTo('bracket-set-password');
+            } else {
+                // 비밀번호 있음 - 인증 화면으로
+                goTo('bracket-password');
+            }
+        }
+        
+        function verifyBracketPin() {
+            const input = document.getElementById('bracket-pin')?.value;
+            const savedPin = localStorage.getItem('bracketPin');
+            
+            if (input === savedPin) {
+                bracketModeAuth = true;
+                announce('대진 설정 모드 진입');
+                goTo('bracket-home');
+            } else {
+                alert('비밀번호가 일치하지 않습니다.');
+                document.getElementById('bracket-pin').value = '';
+                document.getElementById('bracket-pin').focus();
+            }
+        }
+        
+        function checkPasswordStrength() {
+            const pw = document.getElementById('new-bracket-pin')?.value || '';
+            const display = document.getElementById('pw-strength');
+            if (!display) return;
+            
+            const checks = {
+                length: pw.length >= 8,
+                upper: /[A-Z]/.test(pw),
+                lower: /[a-z]/.test(pw),
+                number: /[0-9]/.test(pw),
+                special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw)
+            };
+            
+            const passed = Object.values(checks).filter(v => v).length;
+            
+            let html = '';
+            html += `<div style="color:${checks.length ? '#4caf50' : '#999'};">${checks.length ? '✅' : '⬜'} 8자 이상</div>`;
+            html += `<div style="color:${checks.upper ? '#4caf50' : '#999'};">${checks.upper ? '✅' : '⬜'} 영문 대문자</div>`;
+            html += `<div style="color:${checks.lower ? '#4caf50' : '#999'};">${checks.lower ? '✅' : '⬜'} 영문 소문자</div>`;
+            html += `<div style="color:${checks.number ? '#4caf50' : '#999'};">${checks.number ? '✅' : '⬜'} 숫자</div>`;
+            html += `<div style="color:${checks.special ? '#4caf50' : '#999'};">${checks.special ? '✅' : '⬜'} 특수문자</div>`;
+            
+            if (passed === 5) {
+                html += `<div style="color:#4caf50; font-weight:600; margin-top:8px;">🔒 강력한 비밀번호!</div>`;
+            }
+            
+            display.innerHTML = html;
+        }
+        
+        function validatePassword(pw) {
+            if (pw.length < 8) return '비밀번호는 8자 이상이어야 합니다.';
+            if (!/[A-Z]/.test(pw)) return '영문 대문자를 1개 이상 포함해야 합니다.';
+            if (!/[a-z]/.test(pw)) return '영문 소문자를 1개 이상 포함해야 합니다.';
+            if (!/[0-9]/.test(pw)) return '숫자를 1개 이상 포함해야 합니다.';
+            if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw)) return '특수문자를 1개 이상 포함해야 합니다.';
+            return null;
+        }
+        
+        function setBracketPin() {
+            const newPin = document.getElementById('new-bracket-pin')?.value;
+            const confirmPin = document.getElementById('confirm-bracket-pin')?.value;
+            
+            const error = validatePassword(newPin);
+            if (error) {
+                alert(error);
+                return;
+            }
+            
+            if (newPin !== confirmPin) {
+                alert('비밀번호가 일치하지 않습니다.');
+                return;
+            }
+            
+            localStorage.setItem('bracketPin', newPin);
+            bracketModeAuth = true;
+            announce('비밀번호가 설정되었습니다');
+            goTo('bracket-home');
+        }
+        
+        // ========== 선수 일정 조회 함수 ==========
+        function onScheduleProjectChange() {
+            const select = document.getElementById('schedule-project');
+            const area = document.getElementById('participant-select-area');
+            const nameSelect = document.getElementById('schedule-name-select');
+            const result = document.getElementById('schedule-result');
+            
+            if (!select.value) {
+                area.style.display = 'none';
+                result.innerHTML = '';
+                return;
+            }
+            
+            const project = projects[parseInt(select.value)];
+            if (!project) return;
+            
+            area.style.display = 'block';
+            result.innerHTML = '';
+            
+            // 참가자 목록 수집
+            let participants = [];
+            if (project.groups && project.groups.length > 0) {
+                project.groups.forEach(g => {
+                    participants = participants.concat(g.members || []);
+                });
+            } else if (project.players && project.players.length > 0) {
+                participants = project.players;
+            } else if (project.teams && project.teams.length > 0) {
+                participants = project.teams.map(t => t.name || t);
+            }
+            
+            // 중복 제거
+            participants = [...new Set(participants)];
+            
+            // 정렬
+            participants.sort((a, b) => a.localeCompare(b, 'ko'));
+            
+            nameSelect.innerHTML = '<option value="">-- 목록에서 선택 --</option>' + 
+                participants.map(p => `<option value="${p}">${p}</option>`).join('');
+        }
+        
+        function onScheduleNameSelect() {
+            const select = document.getElementById('schedule-name-select');
+            const input = document.getElementById('schedule-name-input');
+            if (select.value) {
+                input.value = select.value;
+            }
+        }
+        
+        function lookupSchedule() {
+            const projectIdx = document.getElementById('schedule-project')?.value;
+            const name = document.getElementById('schedule-name-input')?.value.trim() || 
+                         document.getElementById('schedule-name-select')?.value;
+            
+            if (!projectIdx || !name) {
+                alert('대회와 이름을 선택해주세요.');
+                return;
+            }
+            
+            const project = projects[parseInt(projectIdx)];
+            if (!project) return;
+            
+            const resultDiv = document.getElementById('schedule-result');
+            
+            // 해당 선수의 경기 찾기
+            const myMatches = project.matches.filter(m => 
+                m.player1Name === name || m.player2Name === name
+            );
+            
+            if (myMatches.length === 0) {
+                resultDiv.innerHTML = `
+                    <div style="text-align:center; padding:20px; background:#fff3e0; border-radius:8px;">
+                        <span style="font-size:24px;">🔍</span>
+                        <p style="margin-top:8px;">"${name}"의 경기를 찾을 수 없습니다.</p>
+                        <p style="font-size:13px; color:#666;">이름을 정확히 입력했는지 확인해주세요.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // 경기 분류
+            const pending = myMatches.filter(m => m.status !== 'completed');
+            const completed = myMatches.filter(m => m.status === 'completed');
+            
+            // 다음 경기 (대기 중인 첫 번째 경기)
+            const nextMatch = pending[0];
+            
+            // 전적 계산
+            let wins = 0, losses = 0;
+            completed.forEach(m => {
+                const isP1 = m.player1Name === name;
+                const p1Sets = m.setScores.filter(s => s.player1 > s.player2).length;
+                const p2Sets = m.setScores.filter(s => s.player2 > s.player1).length;
+                if ((isP1 && p1Sets > p2Sets) || (!isP1 && p2Sets > p1Sets)) {
+                    wins++;
+                } else if (p1Sets !== p2Sets) {
+                    losses++;
+                }
+            });
+            
+            // 내 조 찾기
+            let myGroup = null;
+            if (project.groups) {
+                project.groups.forEach(g => {
+                    if (g.members && g.members.includes(name)) {
+                        myGroup = g;
+                    }
+                });
+            }
+            
+            // 토너먼트 라운드 정보
+            const knockoutMatches = project.matches.filter(m => m.bracketRound);
+            const maxRound = knockoutMatches.length > 0 ? Math.max(...knockoutMatches.map(m => m.bracketRound)) : 0;
+            
+            // 결과 표시
+            let html = `
+                <div style="background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:white; padding:16px; border-radius:12px; margin-bottom:16px;">
+                    <div style="font-size:24px; font-weight:700;">${name}</div>
+                    ${myGroup ? `<div style="opacity:0.9; margin-top:4px;">${myGroup.name}</div>` : ''}
+                    <div style="display:flex; gap:16px; margin-top:12px;">
+                        <div style="text-align:center;">
+                            <div style="font-size:20px; font-weight:600;">${wins}</div>
+                            <div style="font-size:12px; opacity:0.8;">승</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:20px; font-weight:600;">${losses}</div>
+                            <div style="font-size:12px; opacity:0.8;">패</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div style="font-size:20px; font-weight:600;">${myMatches.length}</div>
+                            <div style="font-size:12px; opacity:0.8;">총 경기</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // 다음 경기
+            if (nextMatch) {
+                const opponent = nextMatch.player1Name === name ? nextMatch.player2Name : nextMatch.player1Name;
+                const isTBD = opponent === 'TBD';
+                const roundName = nextMatch.bracketRound ? getRoundName(nextMatch.bracketRound, maxRound + 1) : null;
+                
+                html += `
+                    <div style="background:#e3f2fd; padding:16px; border-radius:8px; margin-bottom:16px;">
+                        <div style="font-weight:600; margin-bottom:8px;">⏭️ 다음 경기</div>
+                        <div style="font-size:18px; font-weight:600;">
+                            ${isTBD ? '🔜 상대 미정 (이전 경기 결과 대기 중)' : `vs ${opponent}`}
+                        </div>
+                        <div style="font-size:13px; color:#666; margin-top:4px;">
+                            ${roundName ? `🏆 ${roundName}` : ''}
+                            ${nextMatch.groupName ? nextMatch.groupName : ''}
+                        </div>
+                    </div>
+                `;
+            } else if (project.tournamentType === 'group-knockout' && myGroup) {
+                // 조별 리그 진행 중이면 본선 진출 안내
+                const groupMatches = project.matches.filter(m => m.groupIndex !== undefined);
+                const completedGroupMatches = groupMatches.filter(m => m.status === 'completed');
+                
+                if (completedGroupMatches.length < groupMatches.length) {
+                    html += `
+                        <div style="background:#fff3e0; padding:16px; border-radius:8px; margin-bottom:16px;">
+                            <div style="font-weight:600; margin-bottom:8px;">📊 조별 리그 진행 중</div>
+                            <div style="font-size:14px; color:#666;">
+                                조별 리그 완료 후 본선 토너먼트가 시작됩니다.
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+            
+            // 대기 중인 경기
+            if (pending.length > 0) {
+                html += `
+                    <div style="margin-bottom:16px;">
+                        <h4 style="margin:0 0 8px 0;">⏳ 대기 중인 경기 (${pending.length})</h4>
+                        ${pending.map(m => {
+                            const opponent = m.player1Name === name ? m.player2Name : m.player1Name;
+                            const isTBD = opponent === 'TBD';
+                            const roundName = m.bracketRound ? getRoundName(m.bracketRound, maxRound + 1) : null;
+                            
+                            return `
+                                <div style="padding:10px; margin:4px 0; background:#fff3e0; border-radius:6px; display:flex; justify-content:space-between; align-items:center;">
+                                    <span>${isTBD ? '🔜 상대 미정' : `vs ${opponent}`}</span>
+                                    <span style="font-size:12px; color:#666;">
+                                        ${roundName ? `🏆 ${roundName}` : ''}
+                                        ${m.groupName || ''}
+                                    </span>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            }
+            
+            // 완료된 경기
+            if (completed.length > 0) {
+                html += `
+                    <div>
+                        <h4 style="margin:0 0 8px 0;">✅ 완료된 경기 (${completed.length})</h4>
+                        ${completed.filter(m => !m.isBye).map(m => {
+                            const isP1 = m.player1Name === name;
+                            const opponent = isP1 ? m.player2Name : m.player1Name;
+                            const scores = m.setScores.map(s => isP1 ? `${s.player1}-${s.player2}` : `${s.player2}-${s.player1}`).join(', ');
+                            const p1Sets = m.setScores.filter(s => s.player1 > s.player2).length;
+                            const p2Sets = m.setScores.filter(s => s.player2 > s.player1).length;
+                            const won = (isP1 && p1Sets > p2Sets) || (!isP1 && p2Sets > p1Sets);
+                            const roundName = m.bracketRound ? getRoundName(m.bracketRound, maxRound + 1) : null;
+                            
+                            return `
+                                <div style="padding:10px; margin:4px 0; background:${won ? '#e8f5e9' : '#ffebee'}; border-radius:6px;">
+                                    <div style="display:flex; justify-content:space-between;">
+                                        <span>${won ? '🏆' : ''} vs ${opponent}</span>
+                                        <span style="font-weight:600; color:${won ? '#4caf50' : '#f44336'};">${won ? '승' : '패'}</span>
+                                    </div>
+                                    <div style="font-size:12px; color:#666; margin-top:4px;">
+                                        ${roundName ? `${roundName} · ` : ''}${m.groupName ? `${m.groupName} · ` : ''}${scores}
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            }
+            
+            resultDiv.innerHTML = html;
+        }
+        // ========== 선수 일정 조회 함수 끝 ==========
+        
+        // ========== 토너먼트 진행 함수 ==========
+        function processTournamentProgression(match, winner) {
+            if (!currentProject) return;
+            
+            const p = currentProject;
+            
+            // 1. 토너먼트 경기인 경우 다음 라운드 처리
+            if (match.bracketRound) {
+                advanceTournamentWinner(p, match, winner);
+            }
+            
+            // 2. 조별 리그 경기인 경우 조별 리그 완료 여부 체크
+            if (match.groupIndex !== undefined && p.tournamentType === 'group-knockout') {
+                checkGroupStageCompletion(p);
+            }
+        }
+        
+        function advanceTournamentWinner(project, match, winner) {
+            const currentRound = match.bracketRound;
+            const matchNum = match.bracketMatchNum;
+            const nextRound = currentRound + 1;
+            const nextMatchNum = Math.ceil(matchNum / 2);
+            
+            // 다음 라운드 경기 찾기
+            let nextMatch = project.matches.find(m => 
+                m.bracketRound === nextRound && m.bracketMatchNum === nextMatchNum
+            );
+            
+            // 다음 라운드 경기가 없으면 생성
+            if (!nextMatch) {
+                // 결승전 이후는 더 이상 경기 없음
+                const remainingMatches = project.matches.filter(m => 
+                    m.bracketRound === currentRound && m.status !== 'completed'
+                );
+                
+                // 같은 라운드에 다른 경기가 남아있는지 확인
+                const sameRoundCompleted = project.matches.filter(m => 
+                    m.bracketRound === currentRound && m.status === 'completed'
+                ).length;
+                
+                const totalInRound = project.matches.filter(m => m.bracketRound === currentRound).length;
+                
+                // 결승전(1경기만 있는 라운드)이면 종료
+                if (totalInRound === 1) {
+                    project.tournamentWinner = winner;
+                    announce(`🏆 우승: ${winner}!`);
+                    return;
+                }
+                
+                // 다음 라운드 경기 생성
+                nextMatch = {
+                    id: Date.now() + nextRound * 100 + nextMatchNum,
+                    player1Name: matchNum % 2 === 1 ? winner : 'TBD',
+                    player2Name: matchNum % 2 === 0 ? winner : 'TBD',
+                    type: project.competitionType,
+                    sets: project.competitionType === 'individual' ? 3 : 1,
+                    winScore: project.competitionType === 'individual' ? 11 : 31,
+                    currentSet: 1,
+                    setScores: [{ player1: 0, player2: 0 }],
+                    currentServe: 'player1',
+                    serveCount: 0,
+                    serveSelected: false,
+                    timeouts: { player1: 1, player2: 1 },
+                    history: [],
+                    status: 'pending',
+                    bracketRound: nextRound,
+                    bracketMatchNum: nextMatchNum,
+                    refereePin: generatePin()
+                };
+                project.matches.push(nextMatch);
+            } else {
+                // 기존 다음 라운드 경기에 승자 배정
+                if (matchNum % 2 === 1) {
+                    nextMatch.player1Name = winner;
+                } else {
+                    nextMatch.player2Name = winner;
+                }
+                
+                // 두 선수 모두 결정되면 경기 준비 완료
+                if (nextMatch.player1Name !== 'TBD' && nextMatch.player2Name !== 'TBD') {
+                    nextMatch.status = 'ready';
+                }
+            }
+        }
+        
+        function checkGroupStageCompletion(project) {
+            if (!project.groups || project.groups.length === 0) return;
+            
+            // 조별 리그 경기가 모두 완료되었는지 확인
+            const groupMatches = project.matches.filter(m => m.groupIndex !== undefined);
+            const completedGroupMatches = groupMatches.filter(m => m.status === 'completed');
+            
+            if (groupMatches.length === 0 || completedGroupMatches.length < groupMatches.length) {
+                return; // 아직 조별 리그 진행 중
+            }
+            
+            // 이미 본선 생성됨?
+            const knockoutMatches = project.matches.filter(m => m.bracketRound);
+            if (knockoutMatches.length > 0) return;
+            
+            // 조별 순위 계산 및 본선 진출자 결정
+            const advanceCount = project.groupSettings?.advanceCount || 2;
+            const knockoutSize = project.knockoutSettings?.size || 8;
+            
+            const advancers = [];
+            
+            project.groups.forEach((group, gIdx) => {
+                const standings = calculateGroupStandings(project, gIdx);
+                const groupAdvancers = standings.slice(0, advanceCount);
+                advancers.push(...groupAdvancers.map((s, rank) => ({
+                    name: s.name,
+                    group: group.name,
+                    rank: rank + 1,
+                    seed: gIdx * advanceCount + rank + 1
+                })));
+            });
+            
+            // 본선 대진표 생성 (시드 배정)
+            generateKnockoutBracket(project, advancers, knockoutSize);
+            
+            announce(`조별 리그 완료! 본선 ${knockoutSize}강 대진표 생성`);
+        }
+        
+        function calculateGroupStandings(project, groupIndex) {
+            const group = project.groups[groupIndex];
+            if (!group) return [];
+            
+            const records = {};
+            group.members.forEach(m => {
+                records[m] = { name: m, wins: 0, losses: 0, setsWon: 0, setsLost: 0, pointsFor: 0, pointsAgainst: 0 };
+            });
+            
+            const groupMatches = project.matches.filter(m => 
+                m.groupIndex === groupIndex && m.status === 'completed'
+            );
+            
+            groupMatches.forEach(m => {
+                const p1 = m.player1Name;
+                const p2 = m.player2Name;
+                
+                if (!records[p1] || !records[p2]) return;
+                
+                let p1Sets = 0, p2Sets = 0;
+                m.setScores.forEach(s => {
+                    if (s.player1 > s.player2) p1Sets++;
+                    else if (s.player2 > s.player1) p2Sets++;
+                    
+                    records[p1].pointsFor += s.player1;
+                    records[p1].pointsAgainst += s.player2;
+                    records[p2].pointsFor += s.player2;
+                    records[p2].pointsAgainst += s.player1;
+                });
+                
+                records[p1].setsWon += p1Sets;
+                records[p1].setsLost += p2Sets;
+                records[p2].setsWon += p2Sets;
+                records[p2].setsLost += p1Sets;
+                
+                if (p1Sets > p2Sets) {
+                    records[p1].wins++;
+                    records[p2].losses++;
+                } else {
+                    records[p2].wins++;
+                    records[p1].losses++;
+                }
+            });
+            
+            // 정렬: 승수 > 세트득실 > 점수득실
+            return Object.values(records).sort((a, b) => {
+                if (b.wins !== a.wins) return b.wins - a.wins;
+                const aSetDiff = a.setsWon - a.setsLost;
+                const bSetDiff = b.setsWon - b.setsLost;
+                if (bSetDiff !== aSetDiff) return bSetDiff - aSetDiff;
+                const aPointDiff = a.pointsFor - a.pointsAgainst;
+                const bPointDiff = b.pointsFor - b.pointsAgainst;
+                return bPointDiff - aPointDiff;
+            });
+        }
+        
+        function generateKnockoutBracket(project, advancers, size) {
+            // 시드 배정 (1번 시드 vs 마지막 시드가 결승에서 만나도록)
+            const seededOrder = [];
+            
+            // 기본 시드 배치 (8강 예시: 1-8, 4-5, 2-7, 3-6)
+            function getSeedOrder(n) {
+                if (n === 2) return [1, 2];
+                const half = getSeedOrder(n / 2);
+                const result = [];
+                half.forEach(seed => {
+                    result.push(seed);
+                    result.push(n + 1 - seed);
+                });
+                return result;
+            }
+            
+            const seedOrder = getSeedOrder(size);
+            
+            // 대진 생성
+            for (let i = 0; i < size; i += 2) {
+                const seed1 = seedOrder[i];
+                const seed2 = seedOrder[i + 1];
+                
+                const p1 = advancers.find(a => a.seed === seed1);
+                const p2 = advancers.find(a => a.seed === seed2);
+                
+                const match = {
+                    id: Date.now() + i,
+                    player1Name: p1 ? p1.name : 'BYE',
+                    player2Name: p2 ? p2.name : 'BYE',
+                    type: project.competitionType,
+                    sets: project.competitionType === 'individual' ? 3 : 1,
+                    winScore: project.competitionType === 'individual' ? 11 : 31,
+                    currentSet: 1,
+                    setScores: [{ player1: 0, player2: 0 }],
+                    currentServe: 'player1',
+                    serveCount: 0,
+                    serveSelected: false,
+                    timeouts: { player1: 1, player2: 1 },
+                    history: [],
+                    status: 'pending',
+                    bracketRound: 1,
+                    bracketMatchNum: (i / 2) + 1,
+                    refereePin: generatePin()
+                };
+                
+                // BYE 처리 - 상대가 자동 진출
+                if (p1 && !p2) {
+                    match.status = 'completed';
+                    match.winner = p1.name;
+                    match.setScores = [{ player1: 0, player2: 0 }];
+                    match.isBye = true;
+                } else if (p2 && !p1) {
+                    match.status = 'completed';
+                    match.winner = p2.name;
+                    match.setScores = [{ player1: 0, player2: 0 }];
+                    match.isBye = true;
+                }
+                
+                project.matches.push(match);
+                
+                // BYE 승자는 바로 다음 라운드로 진출
+                if (match.isBye && match.winner) {
+                    advanceTournamentWinner(project, match, match.winner);
+                }
+            }
+        }
+        
+        function getRoundName(round, totalRounds) {
+            const roundsFromFinal = totalRounds - round;
+            switch(roundsFromFinal) {
+                case 0: return '결승';
+                case 1: return '준결승';
+                case 2: return '8강';
+                case 3: return '16강';
+                case 4: return '32강';
+                default: return `${round}라운드`;
+            }
+        }
+        // ========== 토너먼트 진행 함수 끝 ==========
+        
+        function openBracketProject(index) {
+            currentProject = projects[index];
+            goTo('bracket-detail');
+        }
+        
+        function editTournamentInfo() {
+            const p = currentProject;
+            if (!p) return;
+            
+            const newName = prompt('대회명:', p.name);
+            if (newName && newName.trim()) {
+                p.name = newName.trim();
+            }
+            
+            const newDate = prompt('날짜 (YYYY-MM-DD):', p.date || '');
+            if (newDate !== null) {
+                p.date = newDate;
+            }
+            
+            const newLocation = prompt('장소:', p.location || '');
+            if (newLocation !== null) {
+                p.location = newLocation;
+            }
+            
+            saveProjects();
+            render();
+        }
+        
+        function editGroup(groupIndex) {
+            const p = currentProject;
+            if (!p || !p.groups[groupIndex]) return;
+            
+            const group = p.groups[groupIndex];
+            const currentMembers = group.members.join(', ');
+            const newMembers = prompt(`${group.name} 멤버 (쉼표로 구분):`, currentMembers);
+            
+            if (newMembers !== null) {
+                const members = newMembers.split(',').map(m => m.trim()).filter(m => m);
+                if (members.length > 0) {
+                    group.members = members;
+                    
+                    // 해당 조 경기 재생성
+                    p.matches = p.matches.filter(m => m.groupIndex !== groupIndex);
+                    
+                    for (let i = 0; i < members.length; i++) {
+                        for (let j = i + 1; j < members.length; j++) {
+                            const match = {
+                                id: Date.now() + groupIndex * 1000 + i * 100 + j,
+                                player1Name: members[i],
+                                player2Name: members[j],
+                                type: p.competitionType,
+                                sets: p.competitionType === 'individual' ? 3 : 1,
+                                winScore: p.competitionType === 'individual' ? 11 : 31,
+                                currentSet: 1,
+                                setScores: [{ player1: 0, player2: 0 }],
+                                currentServe: 'player1',
+                                serveCount: 0,
+                                serveSelected: false,
+                                timeouts: { player1: 1, player2: 1 },
+                                history: [],
+                                status: 'pending',
+                                groupIndex: groupIndex,
+                                groupName: group.name,
+                                refereePin: generatePin()
+                            };
+                            p.matches.push(match);
+                            if (!group.matches) group.matches = [];
+                            group.matches.push(match.id);
+                        }
+                    }
+                    
+                    saveProjects();
+                    announce(`${group.name} 수정 완료`);
+                    render();
+                }
+            }
+        }
+        
+        function editMatch(matchId) {
+            const p = currentProject;
+            if (!p) return;
+            
+            const match = p.matches.find(m => m.id === matchId);
+            if (!match) return;
+            
+            const newP1 = prompt('선수1 이름:', match.player1Name);
+            if (newP1 && newP1.trim()) {
+                match.player1Name = newP1.trim();
+            }
+            
+            const newP2 = prompt('선수2 이름:', match.player2Name);
+            if (newP2 && newP2.trim()) {
+                match.player2Name = newP2.trim();
+            }
+            
+            saveProjects();
+            render();
+        }
+        
+        function shuffleGroups() {
+            const p = currentProject;
+            if (!p || !p.groups || p.groups.length === 0) return;
+            
+            if (!confirm('조를 다시 섞으시겠습니까? 진행된 경기 기록이 초기화됩니다.')) return;
+            
+            // 모든 멤버 수집
+            const allMembers = [];
+            p.groups.forEach(g => allMembers.push(...g.members));
+            
+            // 섞기
+            for (let i = allMembers.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [allMembers[i], allMembers[j]] = [allMembers[j], allMembers[i]];
+            }
+            
+            // 다시 배정
+            const groupCount = p.groups.length;
+            p.groups.forEach((g, idx) => {
+                g.members = [];
+                g.matches = [];
+            });
+            
+            allMembers.forEach((member, idx) => {
+                const round = Math.floor(idx / groupCount);
+                const groupIdx = round % 2 === 0 ? idx % groupCount : groupCount - 1 - (idx % groupCount);
+                p.groups[groupIdx].members.push(member);
+            });
+            
+            // 경기 재생성
+            p.matches = [];
+            p.groups.forEach((group, gIdx) => {
+                const members = group.members;
+                for (let i = 0; i < members.length; i++) {
+                    for (let j = i + 1; j < members.length; j++) {
+                        const match = {
+                            id: Date.now() + gIdx * 1000 + i * 100 + j,
+                            player1Name: members[i],
+                            player2Name: members[j],
+                            type: p.competitionType,
+                            sets: p.competitionType === 'individual' ? 3 : 1,
+                            winScore: p.competitionType === 'individual' ? 11 : 31,
+                            currentSet: 1,
+                            setScores: [{ player1: 0, player2: 0 }],
+                            currentServe: 'player1',
+                            serveCount: 0,
+                            serveSelected: false,
+                            timeouts: { player1: 1, player2: 1 },
+                            history: [],
+                            status: 'pending',
+                            groupIndex: gIdx,
+                            groupName: group.name,
+                            refereePin: generatePin()
+                        };
+                        p.matches.push(match);
+                        group.matches.push(match.id);
+                    }
+                }
+            });
+            
+            saveProjects();
+            announce('조가 다시 편성되었습니다');
+            render();
+        }
+        
+        function deleteTournament() {
+            if (!currentProject) return;
+            
+            if (!confirm(`"${currentProject.name}" 대회를 삭제하시겠습니까?\n\n⚠️ 모든 경기 기록이 삭제됩니다.`)) return;
+            
+            const idx = projects.indexOf(currentProject);
+            if (idx > -1) {
+                projects.splice(idx, 1);
+                saveProjects();
+                currentProject = null;
+                announce('대회가 삭제되었습니다');
+                goTo('bracket-home');
+            }
+        }
+        // ========== 대진 설정 모드 함수 끝 ==========
+        
+        // ========== 대회 대진 위자드 함수 끝 ==========
+
         function startTimeout(player) {
             if (currentMatch.timeouts[player] === 0 || isTimeoutActive) return;
             
@@ -6686,9 +8675,10 @@
                 sets: sets,
                 winScore: type === 'team' ? 31 : 11,
                 currentSet: 1,
-                setScores: Array(sets).fill(null).map(() => ({ player1: 0, player2: 0 })),
+                setScores: [{ player1: 0, player2: 0 }], // 첫 세트만 생성
                 currentServe: 'player1',
                 serveCount: 0,
+                serveSelected: false, // 서브 미선택 상태
                 timeouts: { player1: 1, player2: 1 },
                 history: [],
                 status: 'in-progress',
@@ -6707,6 +8697,107 @@
             announce('연습 경기가 시작되었습니다. ' + player1 + ' 대 ' + player2 + '. ' + sets + '세트');
             render();
         }
+        
+        // 연습 경기 기록 저장
+        function savePracticeResult(silent = false) {
+            if (!currentMatch) return;
+            
+            const practiceHistory = JSON.parse(localStorage.getItem('practiceHistory') || '[]');
+            
+            // 중복 저장 방지
+            const exists = practiceHistory.some(m => m.id === currentMatch.id);
+            if (exists) {
+                if (!silent) alert('이미 저장된 기록입니다.');
+                return;
+            }
+            
+            practiceHistory.push({
+                id: currentMatch.id,
+                player1Name: currentMatch.player1Name,
+                player2Name: currentMatch.player2Name,
+                setScores: currentMatch.setScores,
+                history: currentMatch.history,
+                winner: currentMatch.winner,
+                finishedAt: currentMatch.finishedAt || new Date().toISOString(),
+                sets: currentMatch.sets
+            });
+            
+            localStorage.setItem('practiceHistory', JSON.stringify(practiceHistory));
+            if (!silent) {
+                announce('기록이 저장되었습니다');
+                alert('✅ 기록이 저장되었습니다!');
+            }
+        }
+        
+        // 연습 기록 상세 보기
+        function viewPracticeRecord(idx) {
+            window.currentPracticeRecordIdx = idx;
+            goTo('practice-detail');
+        }
+        
+        // 연습 기록 삭제
+        function deletePracticeRecord(idx) {
+            if (!confirm('이 기록을 삭제하시겠습니까?')) return;
+            
+            const practiceHistory = JSON.parse(localStorage.getItem('practiceHistory') || '[]');
+            practiceHistory.splice(idx, 1);
+            localStorage.setItem('practiceHistory', JSON.stringify(practiceHistory));
+            
+            announce('기록이 삭제되었습니다');
+            render();
+        }
+        
+        // 연습 기록 전체 삭제
+        function clearPracticeHistory() {
+            if (!confirm('모든 연습 기록을 삭제하시겠습니까?')) return;
+            
+            localStorage.removeItem('practiceHistory');
+            announce('모든 기록이 삭제되었습니다');
+            render();
+        }
+
+        // 첫 서브 선택
+        function selectFirstServe(player) {
+            if (!currentMatch) return;
+            currentMatch.currentServe = player;
+            currentMatch.serveSelected = true;
+            currentMatch.serveCount = 0;
+            const serverName = player === 'player1' ? currentMatch.player1Name : currentMatch.player2Name;
+            announce(serverName + ' 첫 서브');
+            saveProjects();
+            render();
+        }
+
+        // 워밍업 시작
+        function startWarmup() {
+            warmupActive = true;
+            warmupSeconds = 60;
+            announce('워밍업 1분 시작');
+            render();
+            
+            warmupTimer = setInterval(() => {
+                warmupSeconds--;
+                const display = document.getElementById('warmup-timer');
+                if (display) {
+                    display.textContent = `${Math.floor(warmupSeconds / 60)}:${(warmupSeconds % 60).toString().padStart(2, '0')}`;
+                }
+                
+                if (warmupSeconds <= 0) {
+                    stopWarmup();
+                    announce('워밍업 종료');
+                }
+            }, 1000);
+        }
+
+        // 워밍업 종료
+        function stopWarmup() {
+            warmupActive = false;
+            if (warmupTimer) {
+                clearInterval(warmupTimer);
+                warmupTimer = null;
+            }
+            render();
+        }
 
         // 초기화
         const savedTheme = localStorage.getItem('theme') || 'normal';
@@ -6721,6 +8812,52 @@
         document.getElementById('theme-btn').textContent = `모드: ${currentTheme.name}`;
         document.getElementById('voice-btn').style.opacity = voiceEnabled ? '1' : '0.5';
         render();
+        
+        // PWA Service Worker 등록
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(registration => {
+                        console.log('SW 등록 성공:', registration.scope);
+                        
+                        // 업데이트 확인
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    // 새 버전 사용 가능
+                                    if (confirm('새 버전이 있습니다. 업데이트하시겠습니까?')) {
+                                        window.location.reload();
+                                    }
+                                }
+                            });
+                        });
+                    })
+                    .catch(err => {
+                        console.log('SW 등록 실패:', err);
+                    });
+            });
+        }
+        
+        // PWA 설치 프롬프트
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            
+            // 설치 버튼 표시 (선택적)
+            const installBtn = document.getElementById('pwa-install-btn');
+            if (installBtn) {
+                installBtn.style.display = 'block';
+                installBtn.onclick = async () => {
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    console.log('설치 결과:', outcome);
+                    deferredPrompt = null;
+                    installBtn.style.display = 'none';
+                };
+            }
+        });
     </script>
 </body>
 </html>
