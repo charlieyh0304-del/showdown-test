@@ -620,16 +620,8 @@
                         return;
                     }
                     
-                    // match 화면이면 renderMatch만 (데이터 갱신용)
-                    if (screen === 'match' && currentMatch) {
-                        // match 화면에서는 Firebase가 render() 호출 안 함
-                        // renderMatch(); // 비활성화 - 득점 입력 시 직접 호출
-                    } 
-                    // project-detail은 Firebase가 자동 갱신하지 않음 (경기 진입 방해 방지)
-                    else if (screen === 'project-list' || screen === 'home' || screen === 'referee-home' || screen === 'viewer-home') {
-                        render();
-                    }
-                    // project-detail은 수동으로만 갱신
+                    // Firebase 자동 렌더링 비활성화 (경기 진입 버그 방지)
+                    // 화면 갱신은 수동으로만 진행
                 });
             } catch (error) {
                 console.log('Firebase 로드 실패 - 로컬 모드:', error);
