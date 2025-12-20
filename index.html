@@ -2817,7 +2817,7 @@
                 isAuthenticated = false;
                 screen = 'match';
                 render();
-                setTimeout(() => { isUserAction = false; }, 2000);
+                setTimeout(() => { isUserAction = false; }, 3000);
                 return;
             }
             
@@ -2826,22 +2826,27 @@
                 isAuthenticated = false;
                 screen = 'match';
                 render();
-                setTimeout(() => { isUserAction = false; }, 2000);
+                setTimeout(() => { isUserAction = false; }, 3000);
                 return;
             }
             
-            // 심판 모드 - PIN 확인
+            // 심판 모드 - 먼저 screen을 match로 설정 (Firebase 리스너 방어)
+            screen = 'match';
+            
+            // PIN 확인
             const inputPin = prompt('🔐 심판 PIN을 입력하세요:');
             
             if (inputPin === currentMatch.refereePin) {
                 isAuthenticated = true;
-                screen = 'match';
-                // 즉시 렌더링하고 2초간 Firebase 차단
-                setTimeout(() => { render(); }, 10);
-                setTimeout(() => { isUserAction = false; }, 2000);
+                render();
+                setTimeout(() => { isUserAction = false; }, 3000);
             } else {
-                alert('❌ PIN이 틀렸습니다. 경기에 진입할 수 없습니다.');
-                isUserAction = false;
+                // 실패하면 원래 화면으로
+                screen = 'project-detail';
+                isAuthenticated = false;
+                alert('❌ PIN이 틀렸습니다.');
+                render();
+                setTimeout(() => { isUserAction = false; }, 500);
             }
         }
 
