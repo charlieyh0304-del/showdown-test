@@ -583,7 +583,7 @@
         let isAuthenticated = false; // 심판 인증 여부
         let isPaused = false; // 경기 일시정지 상태
         let warmupActive = false; // 워밍업 진행 상태
-        let warmupSeconds = 60; // 워밍업 남은 시간
+        let warmupSeconds = 90; // 워밍업 남은 시간 (IBSA: 90초)
         let warmupTimer = null; // 워밍업 타이머
         let pauseTimer = null; // 일시정지 타이머
         let pauseSeconds = 0; // 일시정지 경과 시간
@@ -793,22 +793,48 @@
                 `;
             }
             else if (screen === 'referee-home') {
+                // 최근 경기 기록 수
+                const practiceHistory = JSON.parse(localStorage.getItem('practiceHistory') || '[]');
+                const recentCount = practiceHistory.length;
+                
                 app.innerHTML = `
                     <div class="header">
                         <h1>🔐 심판 모드</h1>
                         <p>경기 진행 · 득점 입력</p>
                     </div>
+                    
                     <div class="card">
-                        <h2>경기 관리</h2>
-                        <button type="button" role="button" class="btn btn-primary" onclick="goTo('project-list')" aria-label="프로젝트 목록 보기">📂 대회/경기 목록</button>
-                    </div>
-                    <div class="card" style="background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%); color:white;">
-                        <h2 style="color:white;">🎯 심판 연습 모드</h2>
-                        <p style="font-size:14px; margin-bottom:12px; opacity:0.9;">비밀번호 없이 빠르게 연습할 수 있습니다.</p>
-                        <button type="button" class="btn" onclick="goTo('practice-mode')" style="background:white; color:#ff5722; width:100%;" aria-label="심판 연습 모드 시작">
-                            🎯 연습 시작
+                        <h2>📂 대회 경기</h2>
+                        <p style="font-size:13px; color:var(--text-secondary); margin-bottom:12px;">대진 설정에서 생성된 대회의 경기를 진행합니다.</p>
+                        <button type="button" role="button" class="btn btn-primary" onclick="goTo('project-list')" aria-label="프로젝트 목록 보기">
+                            📂 대회/경기 목록
                         </button>
                     </div>
+                    
+                    <div class="card" style="background:linear-gradient(135deg, #4caf50 0%, #2e7d32 100%); color:white;">
+                        <h2 style="color:white;">➕ 빠른 프로젝트</h2>
+                        <p style="font-size:13px; margin-bottom:12px; opacity:0.9;">소규모 대회나 연습용 프로젝트를 빠르게 생성합니다.</p>
+                        <button type="button" class="btn" onclick="goTo('quick-project')" style="background:white; color:#2e7d32; width:100%;" aria-label="빠른 프로젝트 생성">
+                            ➕ 새 프로젝트 생성
+                        </button>
+                    </div>
+                    
+                    <div class="card" style="background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%); color:white;">
+                        <h2 style="color:white;">🎯 연습 경기</h2>
+                        <p style="font-size:13px; margin-bottom:12px; opacity:0.9;">프로젝트 없이 바로 경기를 진행합니다.</p>
+                        <button type="button" class="btn" onclick="goTo('practice-mode')" style="background:white; color:#ff5722; width:100%;" aria-label="연습 경기 시작">
+                            🎯 연습 경기 시작
+                        </button>
+                    </div>
+                    
+                    <div class="card">
+                        <h2>📋 경기 기록</h2>
+                        <p style="font-size:13px; color:var(--text-secondary); margin-bottom:12px;">저장된 연습 경기 기록 ${recentCount}건</p>
+                        <button type="button" class="btn" onclick="goTo('practice-history')" aria-label="경기 기록 보기">
+                            📋 기록 보기
+                        </button>
+                    </div>
+                    
                     <div class="card">
                         <button type="button" role="button" class="btn" onclick="goTo('home')" aria-label="모드 선택 화면으로 돌아가기">← 모드 선택으로</button>
                     </div>
@@ -866,6 +892,26 @@
                 const unitName = isTeam ? '팀' : '명';
                 const formatName = p.tournamentType === 'group-only' ? '조별 리그만' : 
                                    p.tournamentType === 'group-knockout' ? '조별 리그 + 토너먼트' : '토너먼트만';
+                
+                // 대회 규칙 표시
+                const rulesHTML = p.rules ? `
+                    <div style="background:#e3f2fd; padding:12px; border-radius:8px; margin-bottom:16px;">
+                        <div style="font-weight:600; margin-bottom:8px;">📋 대회 규칙</div>
+                        <div style="font-size:13px; white-space:pre-wrap;">${p.rules}</div>
+                    </div>
+                ` : '';
+                
+                // 세트 수 정보
+                const setsInfo = [];
+                if (p.preliminarySets && p.tournamentType !== 'knockout-only') {
+                    setsInfo.push(`예선 ${p.preliminarySets}세트`);
+                }
+                if (p.finalsSets && p.tournamentType !== 'group-only') {
+                    setsInfo.push(`본선 ${p.finalsSets}세트`);
+                }
+                const setsHTML = setsInfo.length > 0 ? `
+                    <span style="background:#fff3e0; padding:4px 12px; border-radius:16px; font-size:13px;">${setsInfo.join(' / ')}</span>
+                ` : '';
                 
                 // 조별 리그 표시
                 let groupsHTML = '';
@@ -935,12 +981,14 @@
                             <button class="btn" onclick="editTournamentInfo()" style="padding:4px 12px;">✏️ 수정</button>
                         </div>
                         
-                        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px;">
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;">
                             <span style="background:#e3f2fd; color:#1976d2; padding:4px 12px; border-radius:16px; font-size:13px;">${formatName}</span>
                             <span style="background:#f5f5f5; padding:4px 12px; border-radius:16px; font-size:13px;">${isTeam ? '팀전' : '개인전'}</span>
+                            ${setsHTML}
                             <span style="background:#f5f5f5; padding:4px 12px; border-radius:16px; font-size:13px;">🔑 ${p.bracketPin || '없음'}</span>
                         </div>
                         
+                        ${rulesHTML}
                         ${groupsHTML}
                         ${matchesHTML}
                         
@@ -1111,14 +1159,14 @@
             else if (screen === 'practice-mode') {
                 app.innerHTML = `
                     <div class="header" style="background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%);">
-                        <h1 style="color:white;">🎯 심판 연습 모드</h1>
-                        <p style="color:rgba(255,255,255,0.9);">비밀번호 없이 자유롭게 연습</p>
+                        <h1 style="color:white;">🎯 연습 경기</h1>
+                        <p style="color:rgba(255,255,255,0.9);">프로젝트 없이 바로 경기 진행</p>
                     </div>
                     <div class="card">
                         <h2>경기 설정</h2>
                         
                         <div class="form-group">
-                            <label>경기 유형 *</label>
+                            <label>경기 유형</label>
                             <select id="practice-type" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;">
                                 <option value="individual">개인전 (11점 세트제)</option>
                                 <option value="team">팀전 (31점 단판)</option>
@@ -1126,31 +1174,26 @@
                         </div>
                         
                         <div id="practice-sets-group" class="form-group">
-                            <label>세트 수 *</label>
+                            <label>세트 수</label>
                             <select id="practice-sets" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;">
                                 <option value="1">1세트</option>
                                 <option value="3" selected>3세트 (2선승)</option>
                                 <option value="5">5세트 (3선승)</option>
-                                <option value="7">7세트 (4선승)</option>
                             </select>
                         </div>
                         
                         <div class="form-group">
-                            <label>선수/팀 1 이름</label>
-                            <input type="text" id="practice-player1" placeholder="예: 홍길동 / 서울팀" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;">
+                            <label>선수 1</label>
+                            <input type="text" id="practice-player1" placeholder="이름 입력" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;">
                         </div>
                         
                         <div class="form-group">
-                            <label>선수/팀 2 이름</label>
-                            <input type="text" id="practice-player2" placeholder="예: 김철수 / 부산팀" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;">
+                            <label>선수 2</label>
+                            <input type="text" id="practice-player2" placeholder="이름 입력" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;">
                         </div>
                         
                         <button type="button" class="btn btn-primary" onclick="startPracticeMatch()" style="width:100%; margin-top:16px; background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%);" aria-label="연습 경기 시작">
-                            🎯 연습 경기 시작
-                        </button>
-                        
-                        <button type="button" class="btn" onclick="goTo('practice-history')" style="width:100%; margin-top:12px;" aria-label="저장된 연습 기록 보기">
-                            📋 저장된 기록 보기
+                            🎯 경기 시작
                         </button>
                         
                         <button type="button" class="btn" onclick="goTo('referee-home')" style="width:100%; margin-top:8px;" aria-label="돌아가기">
@@ -1169,6 +1212,60 @@
                         };
                     }
                 }, 100);
+            }
+            else if (screen === 'quick-project') {
+                // 빠른 프로젝트 생성
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);">
+                        <h1 style="color:white;">➕ 빠른 프로젝트</h1>
+                        <p style="color:rgba(255,255,255,0.9);">소규모 대회/연습용</p>
+                    </div>
+                    <div class="card">
+                        <div class="form-group">
+                            <label>프로젝트 이름 <span style="color:#d32f2f;">*</span></label>
+                            <input type="text" id="qp-name" placeholder="예: 친선 경기, 연습 대회" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;" dir="ltr">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>경기 유형</label>
+                            <select id="qp-type" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;" onchange="updateQPSets()">
+                                <option value="individual">개인전 (11점 세트제)</option>
+                                <option value="team">팀전 (31점 단판)</option>
+                            </select>
+                        </div>
+                        
+                        <div id="qp-sets-group" class="form-group">
+                            <label>세트 수</label>
+                            <select id="qp-sets" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;">
+                                <option value="1">1세트</option>
+                                <option value="3" selected>3세트 (2선승)</option>
+                                <option value="5">5세트 (3선승)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>참가자 입력 <span style="color:#d32f2f;">*</span></label>
+                            <textarea id="qp-participants" placeholder="한 줄에 한 명씩 입력하세요&#10;&#10;예시:&#10;홍길동&#10;김철수&#10;이영희&#10;박민수" style="width:100%; height:150px; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:14px; resize:vertical;"></textarea>
+                            <div style="font-size:12px; color:#666; margin-top:4px;">쉼표(,)로 구분하거나 줄바꿈으로 입력</div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>대진 방식</label>
+                            <select id="qp-format" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;">
+                                <option value="full-league">풀리그 (모두 vs 모두)</option>
+                                <option value="tournament">토너먼트</option>
+                            </select>
+                        </div>
+                        
+                        <button type="button" class="btn btn-primary" onclick="createQuickProject()" style="width:100%; margin-top:16px; background:linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);">
+                            ✅ 프로젝트 생성
+                        </button>
+                        
+                        <button type="button" class="btn" onclick="goTo('referee-home')" style="width:100%; margin-top:8px;">
+                            ← 돌아가기
+                        </button>
+                    </div>
+                `;
             }
             else if (screen === 'practice-result') {
                 // 연습 경기 결과 화면
@@ -1365,27 +1462,67 @@
                 `;
             }
             else if (screen === 'tournament-wizard') {
-                // 대회 대진 설정 위자드
+                // 대회 대진 설정 위자드 (하이브리드 커스텀)
                 const tw = window.tournamentWizard || { 
                     step: 1, 
-                    info: { name: '', date: '', location: '', type: 'individual' },
+                    mode: 'template', // 'template' or 'custom'
+                    template: null,
+                    info: { name: '', date: '', location: '', type: 'individual', rules: '' },
                     participants: [],
-                    format: 'group-knockout', // group-only, knockout-only, group-knockout
-                    groupSettings: { groupCount: 4, perGroup: 4, advanceCount: 2 },
-                    knockoutSettings: { size: 8 },
+                    teams: [],
+                    seedOrder: [], // 시드 순서
+                    
+                    // 예선 설정
+                    preliminary: {
+                        enabled: true,
+                        groupCount: 4,
+                        perGroup: 4,
+                        sets: 3,
+                        advanceCount: 2,
+                        wildcards: 0,
+                        groupAssignment: 'random' // 'random', 'manual'
+                    },
+                    
+                    // 본선 설정
+                    finals: {
+                        enabled: true,
+                        size: 8,
+                        sets: 5,
+                        customBracket: [], // 커스텀 대진
+                        sameGroupAvoid: 'quarterfinal' // 'none', 'quarterfinal', 'semifinal', 'all'
+                    },
+                    
+                    // 생성된 데이터
                     groups: [],
                     bracket: null
                 };
                 window.tournamentWizard = tw;
                 
-                const stepTitles = ['', '대회 정보', '참가자 입력', '대회 방식', '세부 설정', '대진표 확인'];
+                // 기본값 보장
+                if (!tw.preliminary) tw.preliminary = { enabled: true, groupCount: 4, perGroup: 4, sets: 3, advanceCount: 2, wildcards: 0, groupAssignment: 'random' };
+                if (!tw.finals) tw.finals = { enabled: true, size: 8, sets: 5, customBracket: [], sameGroupAvoid: 'quarterfinal' };
+                if (!tw.mode) tw.mode = 'template';
+                if (!tw.info.rules) tw.info.rules = '';
+                if (!tw.seedOrder) tw.seedOrder = [];
+                
+                const stepTitles = tw.mode === 'custom' 
+                    ? ['', '기본 정보', '참가자 등록', '예선 설정', '본선 설정', '최종 확인']
+                    : ['', '대회 정보', '참가자 등록', '대회 방식', '세부 설정', '대진표 확인'];
                 const totalSteps = 5;
+                
+                // 페이지 타이틀 헤더
+                const pageTitleHTML = `
+                    <div class="header" style="margin:-20px -20px 20px -20px; padding:20px; border-radius:12px 12px 0 0; background:linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);">
+                        <h1 style="color:white; margin:0; font-size:20px;">🏆 대회 대진 설정</h1>
+                        <p style="color:rgba(255,255,255,0.9); margin:4px 0 0 0; font-size:14px;">${stepTitles[tw.step]}</p>
+                    </div>
+                `;
                 
                 // 진행률 표시
                 const progressHTML = `
                     <div style="margin-bottom:24px;">
                         <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-                            <span style="font-weight:600;">Step ${tw.step}/${totalSteps}: ${stepTitles[tw.step]}</span>
+                            <span style="font-weight:600;">단계 ${tw.step}/${totalSteps}</span>
                             <span style="color:var(--text-secondary);">${Math.round(tw.step/totalSteps*100)}%</span>
                         </div>
                         <div style="height:8px; background:#e0e0e0; border-radius:4px; overflow:hidden;">
@@ -1397,11 +1534,11 @@
                 let stepContent = '';
                 
                 if (tw.step === 1) {
-                    // Step 1: 대회 정보
+                    // Step 1: 대회 기본 정보 + 모드 선택
                     stepContent = `
                         <div class="form-group">
-                            <label>대회명 *</label>
-                            <input type="text" id="tw-name" value="${tw.info.name}" placeholder="예: 2024 쇼다운 챔피언십" style="width:100%;">
+                            <label>대회명 <span style="color:#d32f2f;">*</span></label>
+                            <input type="text" id="tw-name" value="${tw.info.name}" placeholder="대회 이름을 입력하세요" style="width:100%;" dir="ltr">
                         </div>
                         <div class="form-group">
                             <label>날짜</label>
@@ -1409,165 +1546,375 @@
                         </div>
                         <div class="form-group">
                             <label>장소</label>
-                            <input type="text" id="tw-location" value="${tw.info.location}" placeholder="예: 서울체육관" style="width:100%;">
+                            <input type="text" id="tw-location" value="${tw.info.location}" placeholder="대회 장소를 입력하세요" style="width:100%;" dir="ltr">
                         </div>
+                        
                         <div class="form-group">
-                            <label>경기 유형 *</label>
-                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px;">
-                                <label style="display:flex; align-items:center; gap:8px; padding:16px; background:${tw.info.type === 'individual' ? '#e3f2fd' : '#f5f5f5'}; border-radius:8px; cursor:pointer; border:2px solid ${tw.info.type === 'individual' ? '#1976d2' : 'transparent'};">
-                                    <input type="radio" name="tw-type" value="individual" ${tw.info.type === 'individual' ? 'checked' : ''} onchange="window.tournamentWizard.info.type=this.value;render();">
-                                    <div>
-                                        <div style="font-weight:600;">👤 개인전</div>
-                                        <div style="font-size:12px; color:#666;">11점 3세트</div>
+                            <label>대회 규칙 (자유 입력)</label>
+                            <textarea id="tw-rules" placeholder="대회 진행 방식, 특별 규칙 등을 자유롭게 입력하세요&#10;&#10;예시:&#10;- 조별 예선 후 상위 2명 본선 진출&#10;- 예선 3세트, 본선 5세트&#10;- A조 1위 vs B조 2위 방식" style="width:100%; height:100px; resize:vertical; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:14px;">${tw.info.rules || ''}</textarea>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>설정 방식 <span style="color:#d32f2f;">*</span></label>
+                            <div style="display:flex; flex-direction:column; gap:12px; margin-top:8px;">
+                                <div style="display:block; padding:16px; background:${tw.mode === 'template' ? '#e3f2fd' : '#f5f5f5'}; border-radius:12px; cursor:pointer; border:2px solid ${tw.mode === 'template' ? '#1976d2' : 'transparent'};" onclick="window.tournamentWizard.mode='template';render();">
+                                    <div style="display:flex; align-items:center; gap:12px;">
+                                        <input type="radio" name="tw-mode" value="template" ${tw.mode === 'template' ? 'checked' : ''} style="pointer-events:none;">
+                                        <div style="flex:1;">
+                                            <div style="font-weight:600;">📋 템플릿 사용</div>
+                                            <div style="font-size:12px; color:#666; margin-top:4px;">기본 제공 형식으로 빠르게 설정</div>
+                                        </div>
                                     </div>
-                                </label>
-                                <label style="display:flex; align-items:center; gap:8px; padding:16px; background:${tw.info.type === 'team' ? '#e3f2fd' : '#f5f5f5'}; border-radius:8px; cursor:pointer; border:2px solid ${tw.info.type === 'team' ? '#1976d2' : 'transparent'};">
-                                    <input type="radio" name="tw-type" value="team" ${tw.info.type === 'team' ? 'checked' : ''} onchange="window.tournamentWizard.info.type=this.value;render();">
-                                    <div>
-                                        <div style="font-weight:600;">👥 팀전</div>
-                                        <div style="font-size:12px; color:#666;">31점 단판</div>
+                                </div>
+                                <div style="display:block; padding:16px; background:${tw.mode === 'custom' ? '#e3f2fd' : '#f5f5f5'}; border-radius:12px; cursor:pointer; border:2px solid ${tw.mode === 'custom' ? '#1976d2' : 'transparent'};" onclick="window.tournamentWizard.mode='custom';render();">
+                                    <div style="display:flex; align-items:center; gap:12px;">
+                                        <input type="radio" name="tw-mode" value="custom" ${tw.mode === 'custom' ? 'checked' : ''} style="pointer-events:none;">
+                                        <div style="flex:1;">
+                                            <div style="font-weight:600;">⚙️ 커스텀 설정</div>
+                                            <div style="font-size:12px; color:#666; margin-top:4px;">조 편성, 세트 수, 대진표 직접 구성</div>
+                                        </div>
                                     </div>
-                                </label>
+                                </div>
                             </div>
                         </div>
+                        
+                        ${tw.mode === 'template' ? `
+                            <div class="form-group">
+                                <label>대회 형식 <span style="color:#d32f2f;">*</span></label>
+                                <div style="display:flex; flex-direction:column; gap:10px; margin-top:8px;">
+                                    <div style="display:flex; align-items:center; gap:12px; padding:14px; background:${tw.template === 'group-only' ? '#e8f5e9' : '#f5f5f5'}; border-radius:8px; cursor:pointer; border:2px solid ${tw.template === 'group-only' ? '#4caf50' : 'transparent'};" onclick="window.tournamentWizard.template='group-only';render();">
+                                        <input type="radio" name="tw-template" value="group-only" ${tw.template === 'group-only' ? 'checked' : ''} style="pointer-events:none;">
+                                        <div>
+                                            <div style="font-weight:600;">📊 조별 리그</div>
+                                            <div style="font-size:11px; color:#666;">조별로 풀리그 진행 후 순위 결정</div>
+                                        </div>
+                                    </div>
+                                    <div style="display:flex; align-items:center; gap:12px; padding:14px; background:${tw.template === 'group-knockout' ? '#e8f5e9' : '#f5f5f5'}; border-radius:8px; cursor:pointer; border:2px solid ${tw.template === 'group-knockout' ? '#4caf50' : 'transparent'};" onclick="window.tournamentWizard.template='group-knockout';render();">
+                                        <input type="radio" name="tw-template" value="group-knockout" ${tw.template === 'group-knockout' ? 'checked' : ''} style="pointer-events:none;">
+                                        <div>
+                                            <div style="font-weight:600;">🏆 조별 예선 + 본선</div>
+                                            <div style="font-size:11px; color:#666;">조별 리그 후 상위자 토너먼트</div>
+                                        </div>
+                                    </div>
+                                    <div style="display:flex; align-items:center; gap:12px; padding:14px; background:${tw.template === 'knockout-only' ? '#e8f5e9' : '#f5f5f5'}; border-radius:8px; cursor:pointer; border:2px solid ${tw.template === 'knockout-only' ? '#4caf50' : 'transparent'};" onclick="window.tournamentWizard.template='knockout-only';render();">
+                                        <input type="radio" name="tw-template" value="knockout-only" ${tw.template === 'knockout-only' ? 'checked' : ''} style="pointer-events:none;">
+                                        <div>
+                                            <div style="font-weight:600;">🥊 토너먼트</div>
+                                            <div style="font-size:11px; color:#666;">녹아웃 방식 토너먼트</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ` : `
+                            <div style="background:#e8f5e9; padding:16px; border-radius:12px; margin-top:8px;">
+                                <div style="font-weight:600; margin-bottom:8px;">✅ 커스텀 모드 선택됨</div>
+                                <div style="font-size:13px; color:#666;">
+                                    다음 단계에서 설정할 수 있는 항목:
+                                    <ul style="margin:8px 0 0 16px; padding:0;">
+                                        <li>조 개수 및 편성 방식</li>
+                                        <li>예선/본선 세트 수</li>
+                                        <li>진출 인원 및 와일드카드</li>
+                                        <li>본선 대진표 직접 구성</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        `}
                     `;
                 } else if (tw.step === 2) {
-                    // Step 2: 참가자 입력
+                    // Step 2: 참가자 등록
                     const unitName = tw.info.type === 'team' ? '팀' : '명';
+                    
                     const participantList = tw.participants.map((p, i) => `
                         <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:var(--bg-secondary); border-radius:6px; margin:4px 0;">
-                            <span>${i+1}. ${p}</span>
-                            <button class="btn btn-danger" onclick="removeTWParticipant(${i})" style="padding:4px 8px; min-width:auto;">✕</button>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span style="background:#1976d2; color:white; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600;">${i+1}</span>
+                                <span style="direction:ltr; unicode-bidi:bidi-override;">${p}</span>
+                            </div>
+                            <div style="display:flex; gap:4px;">
+                                ${i > 0 ? `<button class="btn" onclick="moveTWParticipant(${i}, -1)" style="padding:4px 8px; min-width:auto; font-size:12px;">↑</button>` : ''}
+                                ${i < tw.participants.length - 1 ? `<button class="btn" onclick="moveTWParticipant(${i}, 1)" style="padding:4px 8px; min-width:auto; font-size:12px;">↓</button>` : ''}
+                                <button class="btn btn-danger" onclick="removeTWParticipant(${i})" style="padding:4px 8px; min-width:auto;">✕</button>
+                            </div>
                         </div>
                     `).join('') || '<p style="color:var(--text-secondary); text-align:center; padding:20px;">참가자를 추가해주세요</p>';
                     
                     stepContent = `
                         <div style="background:#e8f5e9; padding:12px; border-radius:8px; margin-bottom:16px;">
-                            <strong>💡 팁</strong>
-                            <p style="font-size:13px; margin-top:4px;">여러 명을 한 번에 입력하려면 쉼표(,)로 구분하세요.</p>
+                            <strong>💡 입력 안내</strong>
+                            <p style="font-size:13px; margin-top:4px;">여러 명을 한 번에 입력하려면 쉼표(,)로 구분하세요. 순서를 변경하면 시드 순서로 사용됩니다.</p>
                         </div>
                         
-                        <div style="display:flex; gap:8px; margin-bottom:16px;">
-                            <input type="text" id="tw-participant" placeholder="${tw.info.type === 'team' ? '팀 이름' : '선수 이름'} (쉼표로 구분)" style="flex:1;" onkeypress="if(event.key==='Enter')addTWParticipant()">
-                            <button class="btn btn-primary" onclick="addTWParticipant()">추가</button>
+                        <div class="form-group">
+                            <label>참가자 추가</label>
+                            <div style="display:flex; gap:8px; margin-top:8px;">
+                                <input type="text" id="tw-participant" placeholder="이름 입력 (쉼표로 여러 명 구분)" style="flex:1;" dir="ltr" onkeypress="if(event.key==='Enter')addTWParticipant()">
+                                <button class="btn btn-primary" onclick="addTWParticipant()">추가</button>
+                            </div>
                         </div>
                         
-                        <div style="background:#f5f5f5; padding:12px; border-radius:8px; margin-bottom:12px;">
-                            <div style="font-size:20px; font-weight:bold;">총 ${tw.participants.length}${unitName}</div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin:16px 0 12px 0;">
+                            <div style="font-size:18px; font-weight:bold;">
+                                등록: ${tw.participants.length}${unitName}
+                            </div>
+                            <div style="display:flex; gap:8px;">
+                                <button class="btn" onclick="shuffleTWParticipants()" style="padding:6px 12px; font-size:13px;">🎲 랜덤 섞기</button>
+                                <button class="btn btn-danger" onclick="clearTWParticipants()" style="padding:6px 12px; font-size:13px;">🗑️ 전체 삭제</button>
+                            </div>
                         </div>
                         
-                        <div style="max-height:300px; overflow-y:auto;">
+                        <div style="max-height:350px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:8px;">
                             ${participantList}
                         </div>
                         
-                        <button class="btn" onclick="clearTWParticipants()" style="margin-top:12px; width:100%;">🗑️ 전체 삭제</button>
-                    `;
-                } else if (tw.step === 3) {
-                    // Step 3: 대회 방식 선택
-                    stepContent = `
-                        <div style="display:flex; flex-direction:column; gap:12px;">
-                            <label style="display:block; padding:20px; background:${tw.format === 'group-only' ? '#e3f2fd' : '#f5f5f5'}; border-radius:12px; cursor:pointer; border:2px solid ${tw.format === 'group-only' ? '#1976d2' : 'transparent'};" onclick="setTWFormat('group-only')">
-                                <input type="radio" name="tw-format" value="group-only" ${tw.format === 'group-only' ? 'checked' : ''} style="display:none;">
-                                <div style="font-size:18px; font-weight:600; margin-bottom:4px;">📊 조별 리그만</div>
-                                <div style="font-size:13px; color:#666;">조별로 풀리그 진행 → 순위 결정</div>
-                                <div style="font-size:12px; color:#1976d2; margin-top:8px;">예: 4개 조, 조당 4명 → 16명 참가</div>
-                            </label>
-                            
-                            <label style="display:block; padding:20px; background:${tw.format === 'group-knockout' ? '#e3f2fd' : '#f5f5f5'}; border-radius:12px; cursor:pointer; border:2px solid ${tw.format === 'group-knockout' ? '#1976d2' : 'transparent'};" onclick="setTWFormat('group-knockout')">
-                                <input type="radio" name="tw-format" value="group-knockout" ${tw.format === 'group-knockout' ? 'checked' : ''} style="display:none;">
-                                <div style="font-size:18px; font-weight:600; margin-bottom:4px;">🏆 조별 리그 + 본선 토너먼트</div>
-                                <div style="font-size:13px; color:#666;">예선 조별 리그 → 상위 진출자 본선 토너먼트</div>
-                                <div style="font-size:12px; color:#1976d2; margin-top:8px;">예: 4개 조, 각 조 상위 2명 → 8강 토너먼트</div>
-                            </label>
-                            
-                            <label style="display:block; padding:20px; background:${tw.format === 'knockout-only' ? '#e3f2fd' : '#f5f5f5'}; border-radius:12px; cursor:pointer; border:2px solid ${tw.format === 'knockout-only' ? '#1976d2' : 'transparent'};" onclick="setTWFormat('knockout-only')">
-                                <input type="radio" name="tw-format" value="knockout-only" ${tw.format === 'knockout-only' ? 'checked' : ''} style="display:none;">
-                                <div style="font-size:18px; font-weight:600; margin-bottom:4px;">🥊 토너먼트만</div>
-                                <div style="font-size:13px; color:#666;">바로 녹아웃 토너먼트 진행</div>
-                                <div style="font-size:12px; color:#1976d2; margin-top:8px;">예: 16강 → 8강 → 4강 → 결승</div>
-                            </label>
+                        <div style="background:#fff3e0; padding:12px; border-radius:8px; margin-top:16px;">
+                            <strong>📋 시드 순서</strong>
+                            <p style="font-size:13px; margin-top:4px;">위 목록 순서가 시드 순서입니다. ↑↓ 버튼으로 조정하거나 🎲 버튼으로 랜덤 배치하세요.</p>
                         </div>
                     `;
-                } else if (tw.step === 4) {
-                    // Step 4: 세부 설정
-                    const participantCount = tw.participants.length;
+                } else if (tw.step === 3) {
+                    // Step 3: 예선 설정 (커스텀) 또는 대회 방식 선택 (템플릿)
                     
-                    if (tw.format === 'group-only' || tw.format === 'group-knockout') {
-                        // 조별 리그 설정
-                        const groupOptions = [2,3,4,5,6,8].map(n => {
+                    if (tw.mode === 'custom') {
+                        // 커스텀 모드: 예선 상세 설정
+                        const participantCount = tw.participants.length;
+                        const groupOptions = [2,3,4,5,6,8,10,12].filter(n => n <= participantCount).map(n => {
                             const perGroup = Math.ceil(participantCount / n);
-                            return `<option value="${n}" ${tw.groupSettings.groupCount === n ? 'selected' : ''}>${n}개 조 (조당 약 ${perGroup}${tw.info.type === 'team' ? '팀' : '명'})</option>`;
+                            return `<option value="${n}" ${tw.preliminary.groupCount === n ? 'selected' : ''}>${n}개 조 (조당 약 ${perGroup}명)</option>`;
                         }).join('');
                         
-                        const advanceOptions = tw.format === 'group-knockout' ? `
-                            <div class="form-group">
-                                <label>본선 진출자 수 (조당)</label>
-                                <select id="tw-advance" onchange="updateTWSettings()" style="width:100%;">
-                                    <option value="1" ${tw.groupSettings.advanceCount === 1 ? 'selected' : ''}>각 조 1위만 (${tw.groupSettings.groupCount}명 진출)</option>
-                                    <option value="2" ${tw.groupSettings.advanceCount === 2 ? 'selected' : ''}>각 조 상위 2명 (${tw.groupSettings.groupCount * 2}명 진출)</option>
-                                    <option value="3" ${tw.groupSettings.advanceCount === 3 ? 'selected' : ''}>각 조 상위 3명 (${tw.groupSettings.groupCount * 3}명 진출)</option>
-                                </select>
-                            </div>
-                        ` : '';
-                        
-                        const knockoutOptions = tw.format === 'group-knockout' ? `
-                            <div style="background:#fff3e0; padding:16px; border-radius:8px; margin-top:16px;">
-                                <h4 style="margin:0 0 12px 0;">🥊 본선 토너먼트</h4>
-                                <div class="form-group" style="margin:0;">
-                                    <label>토너먼트 규모</label>
-                                    <select id="tw-knockout-size" onchange="updateTWSettings()" style="width:100%;">
-                                        <option value="4" ${tw.knockoutSettings.size === 4 ? 'selected' : ''}>4강 (4명)</option>
-                                        <option value="8" ${tw.knockoutSettings.size === 8 ? 'selected' : ''}>8강 (8명)</option>
-                                        <option value="16" ${tw.knockoutSettings.size === 16 ? 'selected' : ''}>16강 (16명)</option>
-                                        <option value="32" ${tw.knockoutSettings.size === 32 ? 'selected' : ''}>32강 (32명)</option>
-                                    </select>
-                                </div>
-                                <div id="tw-knockout-validation" style="margin-top:8px; font-size:13px;"></div>
-                            </div>
-                        ` : '';
-                        
                         stepContent = `
-                            <div style="background:#e3f2fd; padding:16px; border-radius:8px; margin-bottom:16px;">
-                                <h4 style="margin:0 0 12px 0;">📊 조별 리그 설정</h4>
-                                <div class="form-group" style="margin:0;">
+                            <div class="form-group">
+                                <label>예선 진행 여부</label>
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px;">
+                                    <div style="display:flex; align-items:center; gap:8px; padding:14px; background:${tw.preliminary.enabled ? '#e8f5e9' : '#f5f5f5'}; border-radius:8px; cursor:pointer; border:2px solid ${tw.preliminary.enabled ? '#4caf50' : 'transparent'};" onclick="window.tournamentWizard.preliminary.enabled=true;render();">
+                                        <input type="radio" name="tw-prelim" value="true" ${tw.preliminary.enabled ? 'checked' : ''} style="pointer-events:none;">
+                                        <span style="font-weight:600;">조별 예선 진행</span>
+                                    </div>
+                                    <div style="display:flex; align-items:center; gap:8px; padding:14px; background:${!tw.preliminary.enabled ? '#fff3e0' : '#f5f5f5'}; border-radius:8px; cursor:pointer; border:2px solid ${!tw.preliminary.enabled ? '#ff9800' : 'transparent'};" onclick="window.tournamentWizard.preliminary.enabled=false;render();">
+                                        <input type="radio" name="tw-prelim" value="false" ${!tw.preliminary.enabled ? 'checked' : ''} style="pointer-events:none;">
+                                        <span style="font-weight:600;">바로 본선</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            ${tw.preliminary.enabled ? `
+                                <div class="form-group">
                                     <label>조 개수</label>
-                                    <select id="tw-group-count" onchange="updateTWSettings()" style="width:100%;">
+                                    <select id="tw-custom-groups" onchange="updateCustomPreliminary()" style="width:100%;">
                                         ${groupOptions}
                                     </select>
                                 </div>
-                                ${advanceOptions}
-                            </div>
-                            ${knockoutOptions}
-                            
-                            <div style="background:#f5f5f5; padding:16px; border-radius:8px; margin-top:16px;">
-                                <h4 style="margin:0 0 8px 0;">📋 설정 요약</h4>
-                                <div id="tw-settings-summary" style="font-size:14px;"></div>
-                            </div>
+                                
+                                <div class="form-group">
+                                    <label>예선 세트 수</label>
+                                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px;">
+                                        ${[3,5].map(s => `
+                                            <div style="display:flex; align-items:center; justify-content:center; gap:8px; padding:14px; background:${tw.preliminary.sets === s ? '#e3f2fd' : '#f5f5f5'}; border-radius:8px; cursor:pointer; border:2px solid ${tw.preliminary.sets === s ? '#1976d2' : 'transparent'};" onclick="window.tournamentWizard.preliminary.sets=${s};render();">
+                                                <input type="radio" name="tw-prelim-sets" value="${s}" ${tw.preliminary.sets === s ? 'checked' : ''} style="pointer-events:none;">
+                                                <span style="font-weight:600;">${s}세트</span>
+                                                <span style="font-size:12px; color:#666;">(${Math.ceil(s/2)}선승)</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>조 편성 방식</label>
+                                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px;">
+                                        <div style="display:flex; align-items:center; gap:8px; padding:14px; background:${tw.preliminary.groupAssignment === 'random' ? '#e3f2fd' : '#f5f5f5'}; border-radius:8px; cursor:pointer; border:2px solid ${tw.preliminary.groupAssignment === 'random' ? '#1976d2' : 'transparent'};" onclick="window.tournamentWizard.preliminary.groupAssignment='random';render();">
+                                            <input type="radio" name="tw-group-assign" value="random" ${tw.preliminary.groupAssignment === 'random' ? 'checked' : ''} style="pointer-events:none;">
+                                            <div>
+                                                <div style="font-weight:600;">🎲 랜덤 배정</div>
+                                                <div style="font-size:11px; color:#666;">무작위로 조 배정</div>
+                                            </div>
+                                        </div>
+                                        <div style="display:flex; align-items:center; gap:8px; padding:14px; background:${tw.preliminary.groupAssignment === 'manual' ? '#e3f2fd' : '#f5f5f5'}; border-radius:8px; cursor:pointer; border:2px solid ${tw.preliminary.groupAssignment === 'manual' ? '#1976d2' : 'transparent'};" onclick="window.tournamentWizard.preliminary.groupAssignment='manual';render();">
+                                            <input type="radio" name="tw-group-assign" value="manual" ${tw.preliminary.groupAssignment === 'manual' ? 'checked' : ''} style="pointer-events:none;">
+                                            <div>
+                                                <div style="font-weight:600;">✋ 직접 입력</div>
+                                                <div style="font-size:11px; color:#666;">시드 순서대로 배정</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div style="background:#fff3e0; padding:16px; border-radius:12px; margin-top:16px;">
+                                    <div style="font-weight:600; margin-bottom:12px;">🏆 본선 진출 규칙</div>
+                                    <div class="form-group" style="margin-bottom:12px;">
+                                        <label>각 조 진출 인원</label>
+                                        <select id="tw-advance-count" onchange="window.tournamentWizard.preliminary.advanceCount=parseInt(this.value);render();" style="width:100%;">
+                                            ${[1,2,3,4].map(n => `<option value="${n}" ${tw.preliminary.advanceCount === n ? 'selected' : ''}>상위 ${n}명</option>`).join('')}
+                                        </select>
+                                    </div>
+                                    <div class="form-group" style="margin:0;">
+                                        <label>와일드카드 (추가 진출)</label>
+                                        <select id="tw-wildcards" onchange="window.tournamentWizard.preliminary.wildcards=parseInt(this.value);render();" style="width:100%;">
+                                            ${[0,1,2,4].map(n => `<option value="${n}" ${tw.preliminary.wildcards === n ? 'selected' : ''}>${n}명</option>`).join('')}
+                                        </select>
+                                    </div>
+                                    <div style="margin-top:12px; padding:12px; background:#fffde7; border-radius:8px; font-size:14px;">
+                                        총 본선 진출: <strong>${tw.preliminary.groupCount * tw.preliminary.advanceCount + tw.preliminary.wildcards}명</strong>
+                                    </div>
+                                </div>
+                            ` : `
+                                <div style="background:#f5f5f5; padding:20px; border-radius:12px; text-align:center;">
+                                    <div style="font-size:16px; color:#666;">예선 없이 바로 본선 토너먼트로 진행합니다</div>
+                                    <div style="font-size:14px; color:#999; margin-top:8px;">참가자 ${participantCount}명 전원 본선 진출</div>
+                                </div>
+                            `}
                         `;
                     } else {
-                        // 토너먼트만
-                        const sizes = [4, 8, 16, 32, 64].filter(s => s <= participantCount * 2);
-                        const sizeOptions = sizes.map(s => 
-                            `<option value="${s}" ${tw.knockoutSettings.size === s ? 'selected' : ''}>${s}강 (${s}명 필요)</option>`
-                        ).join('');
-                        
+                        // 템플릿 모드: 간단한 설정
+                        const participantCount = tw.participants.length;
                         stepContent = `
-                            <div style="background:#fff3e0; padding:16px; border-radius:8px; margin-bottom:16px;">
-                                <h4 style="margin:0 0 12px 0;">🥊 토너먼트 설정</h4>
-                                <div class="form-group" style="margin:0;">
-                                    <label>토너먼트 규모</label>
-                                    <select id="tw-knockout-size" onchange="updateTWSettings()" style="width:100%;">
-                                        ${sizeOptions}
-                                    </select>
-                                </div>
-                                <p style="font-size:13px; color:#666; margin-top:8px;">
-                                    현재 참가자: ${participantCount}${tw.info.type === 'team' ? '팀' : '명'}
-                                </p>
+                            <div style="background:#e3f2fd; padding:16px; border-radius:12px; margin-bottom:16px;">
+                                <div style="font-weight:600;">선택한 템플릿: ${tw.template === 'group-only' ? '📊 조별 리그' : tw.template === 'group-knockout' ? '🏆 조별 예선 + 본선' : '🥊 토너먼트'}</div>
                             </div>
                             
-                            <div style="background:#e8f5e9; padding:12px; border-radius:8px;">
-                                <strong>💡 부전승 안내</strong>
-                                <p style="font-size:13px; margin-top:4px;">참가자가 토너먼트 규모보다 적으면 일부 선수는 부전승으로 다음 라운드 진출합니다.</p>
+                            ${tw.template !== 'knockout-only' ? `
+                                <div class="form-group">
+                                    <label>조 개수</label>
+                                    <select id="tw-tpl-groups" onchange="window.tournamentWizard.preliminary.groupCount=parseInt(this.value);render();" style="width:100%;">
+                                        ${[2,3,4,5,6,8].filter(n => n <= participantCount).map(n => {
+                                            const perGroup = Math.ceil(participantCount / n);
+                                            return `<option value="${n}" ${tw.preliminary.groupCount === n ? 'selected' : ''}>${n}개 조 (조당 약 ${perGroup}명)</option>`;
+                                        }).join('')}
+                                    </select>
+                                </div>
+                            ` : ''}
+                            
+                            ${tw.template === 'group-knockout' ? `
+                                <div class="form-group">
+                                    <label>본선 진출 (각 조)</label>
+                                    <select onchange="window.tournamentWizard.preliminary.advanceCount=parseInt(this.value);render();" style="width:100%;">
+                                        ${[1,2,3].map(n => `<option value="${n}" ${tw.preliminary.advanceCount === n ? 'selected' : ''}>상위 ${n}명</option>`).join('')}
+                                    </select>
+                                </div>
+                            ` : ''}
+                            
+                            <div class="form-group">
+                                <label>세트 수</label>
+                                <select onchange="window.tournamentWizard.preliminary.sets=parseInt(this.value);render();" style="width:100%;">
+                                    <option value="3" ${tw.preliminary.sets === 3 ? 'selected' : ''}>3세트 (2선승)</option>
+                                    <option value="5" ${tw.preliminary.sets === 5 ? 'selected' : ''}>5세트 (3선승)</option>
+                                </select>
+                            </div>
+                            
+                            <div style="background:#f5f5f5; padding:12px; border-radius:8px; margin-top:12px;">
+                                <div style="font-size:14px;">참가자: <strong>${participantCount}명</strong></div>
+                                ${tw.template === 'group-knockout' ? `<div style="font-size:14px; margin-top:4px;">본선 진출: <strong>${tw.preliminary.groupCount * tw.preliminary.advanceCount}명</strong></div>` : ''}
+                            </div>
+                        `;
+                    }
+                } else if (tw.step === 4) {
+                    // Step 4: 본선 대진 설정 (커스텀) 또는 세부 설정 (템플릿)
+                    const participantCount = tw.participants.length;
+                    
+                    if (tw.mode === 'custom') {
+                        // 커스텀 모드: 본선 대진표 직접 구성
+                        const finalsCount = tw.preliminary.enabled 
+                            ? (tw.preliminary.groupCount * tw.preliminary.advanceCount + tw.preliminary.wildcards)
+                            : participantCount;
+                        
+                        // 본선 규모 옵션
+                        const sizeOptions = [4,8,16,32,64].filter(s => s >= finalsCount / 2 && s <= finalsCount * 2);
+                        
+                        // 조 라벨 생성
+                        const groupLabels = [];
+                        for (let i = 0; i < tw.preliminary.groupCount; i++) {
+                            groupLabels.push(String.fromCharCode(65 + i)); // A, B, C, ...
+                        }
+                        
+                        // 커스텀 대진 초기화
+                        if (!tw.finals.customBracket || tw.finals.customBracket.length === 0) {
+                            initCustomBracket();
+                        }
+                        
+                        // 대진 편집 UI
+                        const bracketEditorHTML = tw.preliminary.enabled ? tw.finals.customBracket.map((match, idx) => `
+                            <div style="display:flex; align-items:center; gap:8px; padding:12px; margin:8px 0; background:#f5f5f5; border-radius:8px;">
+                                <span style="font-weight:600; min-width:60px;">경기 ${idx + 1}</span>
+                                <select onchange="updateCustomBracketMatch(${idx}, 'p1Group', this.value)" style="flex:1; padding:8px;">
+                                    ${groupLabels.map(g => `<option value="${g}" ${match.p1Group === g ? 'selected' : ''}>${g}조</option>`).join('')}
+                                </select>
+                                <select onchange="updateCustomBracketMatch(${idx}, 'p1Rank', parseInt(this.value))" style="width:60px; padding:8px;">
+                                    ${[1,2,3,4].slice(0, tw.preliminary.advanceCount).map(r => `<option value="${r}" ${match.p1Rank === r ? 'selected' : ''}>${r}위</option>`).join('')}
+                                </select>
+                                <span style="font-weight:600;">vs</span>
+                                <select onchange="updateCustomBracketMatch(${idx}, 'p2Group', this.value)" style="flex:1; padding:8px;">
+                                    ${groupLabels.map(g => `<option value="${g}" ${match.p2Group === g ? 'selected' : ''}>${g}조</option>`).join('')}
+                                </select>
+                                <select onchange="updateCustomBracketMatch(${idx}, 'p2Rank', parseInt(this.value))" style="width:60px; padding:8px;">
+                                    ${[1,2,3,4].slice(0, tw.preliminary.advanceCount).map(r => `<option value="${r}" ${match.p2Rank === r ? 'selected' : ''}>${r}위</option>`).join('')}
+                                </select>
+                            </div>
+                        `).join('') : `
+                            <div style="background:#f5f5f5; padding:20px; border-radius:8px; text-align:center;">
+                                <div style="color:#666;">예선 없이 진행 시 본선 대진은 자동 또는 시드 배정됩니다</div>
+                            </div>
+                        `;
+                        
+                        stepContent = `
+                            <div style="background:#fff3e0; padding:16px; border-radius:12px; margin-bottom:16px;">
+                                <div style="font-weight:600; margin-bottom:4px;">🥊 본선 설정</div>
+                                <div style="font-size:13px; color:#666;">토너먼트 대진을 구성합니다</div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>본선 규모</label>
+                                <select id="tw-finals-size" onchange="window.tournamentWizard.finals.size=parseInt(this.value);initCustomBracket();render();" style="width:100%;">
+                                    ${sizeOptions.map(s => `<option value="${s}" ${tw.finals.size === s ? 'selected' : ''}>${s}강</option>`).join('')}
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>본선 세트 수</label>
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px;">
+                                    ${[3,5].map(s => `
+                                        <div style="display:flex; align-items:center; justify-content:center; gap:8px; padding:14px; background:${tw.finals.sets === s ? '#fff3e0' : '#f5f5f5'}; border-radius:8px; cursor:pointer; border:2px solid ${tw.finals.sets === s ? '#ff9800' : 'transparent'};" onclick="window.tournamentWizard.finals.sets=${s};render();">
+                                            <input type="radio" name="tw-finals-sets" value="${s}" ${tw.finals.sets === s ? 'checked' : ''} style="pointer-events:none;">
+                                            <span style="font-weight:600;">${s}세트</span>
+                                            <span style="font-size:12px; color:#666;">(${Math.ceil(s/2)}선승)</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            
+                            ${tw.preliminary.enabled ? `
+                                <div class="form-group">
+                                    <label>같은 조 선수 회피</label>
+                                    <select onchange="window.tournamentWizard.finals.sameGroupAvoid=this.value;render();" style="width:100%;">
+                                        <option value="none" ${tw.finals.sameGroupAvoid === 'none' ? 'selected' : ''}>회피 안 함</option>
+                                        <option value="quarterfinal" ${tw.finals.sameGroupAvoid === 'quarterfinal' ? 'selected' : ''}>8강까지 회피</option>
+                                        <option value="semifinal" ${tw.finals.sameGroupAvoid === 'semifinal' ? 'selected' : ''}>4강까지 회피</option>
+                                        <option value="all" ${tw.finals.sameGroupAvoid === 'all' ? 'selected' : ''}>결승까지 회피</option>
+                                    </select>
+                                </div>
+                                
+                                <div style="margin-top:20px;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                                        <label style="font-weight:600;">🏆 ${tw.finals.size}강 대진표 구성</label>
+                                        <button class="btn" onclick="autoFillBracket()" style="padding:6px 12px; font-size:13px;">🎲 자동 배정</button>
+                                    </div>
+                                    <div style="max-height:400px; overflow-y:auto;">
+                                        ${bracketEditorHTML}
+                                    </div>
+                                </div>
+                            ` : ''}
+                        `;
+                    } else {
+                        // 템플릿 모드: 기존 세부 설정
+                        stepContent = `
+                            <div style="background:#e8f5e9; padding:16px; border-radius:12px; margin-bottom:16px;">
+                                <div style="font-weight:600;">✅ 설정 완료</div>
+                                <div style="font-size:13px; color:#666; margin-top:4px;">아래 내용을 확인하세요</div>
+                            </div>
+                            
+                            <div style="background:#f5f5f5; padding:16px; border-radius:8px;">
+                                <div style="margin-bottom:12px;"><strong>참가자:</strong> ${participantCount}명</div>
+                                ${tw.template !== 'knockout-only' ? `<div style="margin-bottom:12px;"><strong>조 편성:</strong> ${tw.preliminary.groupCount}개 조</div>` : ''}
+                                ${tw.template === 'group-knockout' ? `<div style="margin-bottom:12px;"><strong>본선 진출:</strong> 각 조 상위 ${tw.preliminary.advanceCount}명 (총 ${tw.preliminary.groupCount * tw.preliminary.advanceCount}명)</div>` : ''}
+                                <div><strong>세트:</strong> ${tw.preliminary.sets}세트 (${Math.ceil(tw.preliminary.sets/2)}선승)</div>
                             </div>
                         `;
                     }
@@ -1580,6 +1927,16 @@
                             <h3 style="margin:0 0 8px 0;">✅ 대진표 미리보기</h3>
                             <p style="font-size:13px; margin:0;">아래 대진표를 확인하고 확정하세요.</p>
                         </div>
+                        
+                        ${tw.mode === 'custom' && tw.preliminary.enabled ? `
+                            <div style="background:#fff3e0; padding:12px; border-radius:8px; margin-bottom:16px;">
+                                <strong>📊 커스텀 대진 설정</strong>
+                                <div style="font-size:13px; margin-top:4px;">
+                                    예선: ${tw.preliminary.groupCount}개 조, ${tw.preliminary.sets}세트<br>
+                                    본선: ${tw.finals.size}강, ${tw.finals.sets}세트
+                                </div>
+                            </div>
+                        ` : ''}
                         
                         <div id="tw-preview" style="max-height:400px; overflow-y:auto;">
                             ${previewHTML}
@@ -1610,7 +1967,8 @@
                 app.innerHTML = `
                     <div class="card">
                         <div class="header" style="margin:-20px -20px 20px -20px; padding:20px; border-radius:12px 12px 0 0; background:linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);">
-                            <h1 style="color:white; margin:0;">🏆 대회 대진 설정</h1>
+                            <h1 style="color:white; margin:0; font-size:20px;">🏆 대회 대진 설정</h1>
+                            <p style="color:rgba(255,255,255,0.9); margin:8px 0 0 0; font-size:14px;">${stepTitles[tw.step]}</p>
                         </div>
                         ${progressHTML}
                         ${stepContent}
@@ -1665,6 +2023,24 @@
                 const hasAutoResult = currentProject.autoTournamentResult;
                 const hasGroups = currentProject.groups?.length > 0;
                 
+                // 대회 규칙 표시
+                const rulesHTML = currentProject.rules ? `
+                    <div style="background:#e3f2fd; padding:12px; border-radius:8px; margin-bottom:16px;">
+                        <div style="font-weight:600; margin-bottom:8px;">📋 대회 규칙</div>
+                        <div style="font-size:13px; white-space:pre-wrap;">${currentProject.rules}</div>
+                    </div>
+                ` : '';
+                
+                // 세트 수 정보
+                const setsInfo = [];
+                if (currentProject.preliminarySets && currentProject.tournamentType !== 'knockout-only') {
+                    setsInfo.push(`예선 ${currentProject.preliminarySets}세트`);
+                }
+                if (currentProject.finalsSets && currentProject.tournamentType !== 'group-only') {
+                    setsInfo.push(`본선 ${currentProject.finalsSets}세트`);
+                }
+                const setsDisplay = setsInfo.length > 0 ? ` · ${setsInfo.join(', ')}` : '';
+                
                 let tabsHTML = '';
                 let contentHTML = '';
                 
@@ -1682,8 +2058,9 @@
                     <div class="card">
                         <button class="btn" onclick="goTo('viewer-select-project')" style="margin-bottom:16px;" aria-label="대회 목록으로 돌아가기">← 대회 목록</button>
                         <h2>📊 ${currentProject.name}</h2>
-                        <p style="color:var(--text-secondary); margin-bottom:16px;">${isTeam ? '팀전' : '개인전'} · ${currentProject.date || ''}</p>
+                        <p style="color:var(--text-secondary); margin-bottom:16px;">${isTeam ? '팀전' : '개인전'} · ${currentProject.date || ''}${setsDisplay}</p>
                         
+                        ${rulesHTML}
                         ${tabsHTML}
                         
                         <div id="viewer-content">
@@ -3107,13 +3484,18 @@
                         `}
                     </div>
                     
-                    ${isAuthenticated && !warmupActive ? `
+                    ${(() => {
+                        // 경기당 워밍업 1회만 (IBSA 규칙)
+                        const warmupUsed = currentMatch.warmupUsed || false;
+                        const canUseWarmup = isAuthenticated && !warmupActive && !warmupUsed;
+                        return canUseWarmup ? `
                         <div style="text-align:center; margin-bottom:16px;">
                             <button class="btn" onclick="startWarmup()" style="background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%); color:white;">
-                                🔥 워밍업 1분 시작
+                                🔥 워밍업 90초 시작
                             </button>
                         </div>
-                    ` : ''}
+                    ` : '';
+                    })()}
                     
                     ${warmupActive ? `
                         <div style="text-align:center; padding:16px; background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%); color:white; border-radius:8px; margin-bottom:16px;">
@@ -3694,6 +4076,7 @@
                 sideChangeUsed: false,
                 status: 'active',
                 history: [],
+                warmupUsed: false,
                 createdAt: new Date().toISOString()
             };
             
@@ -7421,6 +7804,13 @@
                 tw.info.name = name;
                 tw.info.date = document.getElementById('tw-date')?.value || '';
                 tw.info.location = document.getElementById('tw-location')?.value.trim() || '';
+                tw.info.rules = document.getElementById('tw-rules')?.value.trim() || '';
+                
+                // 템플릿 모드에서 템플릿 선택 확인
+                if (tw.mode === 'template' && !tw.template) {
+                    alert('대회 형식을 선택해주세요.');
+                    return;
+                }
             } else if (tw.step === 2) {
                 if (tw.participants.length < 2) {
                     alert('최소 2명 이상의 참가자가 필요합니다.');
@@ -7479,6 +7869,27 @@
             render();
         }
         
+        function moveTWParticipant(index, direction) {
+            const tw = window.tournamentWizard;
+            const newIndex = index + direction;
+            if (newIndex < 0 || newIndex >= tw.participants.length) return;
+            
+            const temp = tw.participants[index];
+            tw.participants[index] = tw.participants[newIndex];
+            tw.participants[newIndex] = temp;
+            render();
+        }
+        
+        function shuffleTWParticipants() {
+            const tw = window.tournamentWizard;
+            for (let i = tw.participants.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [tw.participants[i], tw.participants[j]] = [tw.participants[j], tw.participants[i]];
+            }
+            announce('참가자 순서가 랜덤으로 섞였습니다');
+            render();
+        }
+        
         function clearTWParticipants() {
             if (confirm('모든 참가자를 삭제하시겠습니까?')) {
                 window.tournamentWizard.participants = [];
@@ -7486,8 +7897,144 @@
             }
         }
         
+        // 커스텀 예선 설정 업데이트
+        function updateCustomPreliminary() {
+            const tw = window.tournamentWizard;
+            const groupCount = parseInt(document.getElementById('tw-custom-groups')?.value) || 4;
+            tw.preliminary.groupCount = groupCount;
+            tw.preliminary.perGroup = Math.ceil(tw.participants.length / groupCount);
+            render();
+        }
+        
+        // 커스텀 대진표 초기화
+        function initCustomBracket() {
+            const tw = window.tournamentWizard;
+            const size = tw.finals.size || 8;
+            const matchCount = size / 2;
+            
+            tw.finals.customBracket = [];
+            
+            // 조 라벨 생성
+            const groupLabels = [];
+            for (let i = 0; i < tw.preliminary.groupCount; i++) {
+                groupLabels.push(String.fromCharCode(65 + i)); // A, B, C, ...
+            }
+            
+            // 기본 대진 생성 (A1 vs B2, B1 vs A2, ...)
+            for (let i = 0; i < matchCount; i++) {
+                const g1Idx = (i * 2) % groupLabels.length;
+                const g2Idx = (i * 2 + 1) % groupLabels.length;
+                
+                tw.finals.customBracket.push({
+                    matchNum: i + 1,
+                    p1Group: groupLabels[g1Idx] || 'A',
+                    p1Rank: 1,
+                    p2Group: groupLabels[g2Idx] || 'B',
+                    p2Rank: 2
+                });
+            }
+        }
+        
+        // 커스텀 대진 개별 경기 업데이트
+        function updateCustomBracketMatch(idx, field, value) {
+            const tw = window.tournamentWizard;
+            if (tw.finals.customBracket && tw.finals.customBracket[idx]) {
+                tw.finals.customBracket[idx][field] = value;
+            }
+        }
+        
+        // 자동 대진 배정 (교차 시드)
+        function autoFillBracket() {
+            const tw = window.tournamentWizard;
+            const size = tw.finals.size || 8;
+            const matchCount = size / 2;
+            const groupCount = tw.preliminary.groupCount;
+            const advanceCount = tw.preliminary.advanceCount;
+            
+            // 조 라벨
+            const groupLabels = [];
+            for (let i = 0; i < groupCount; i++) {
+                groupLabels.push(String.fromCharCode(65 + i));
+            }
+            
+            tw.finals.customBracket = [];
+            
+            // 교차 시드 방식 (A1 vs B2, A2 vs B1, C1 vs D2, ...)
+            for (let i = 0; i < matchCount; i++) {
+                const pairIdx = Math.floor(i / 2);
+                const isFirstInPair = i % 2 === 0;
+                
+                const g1Idx = (pairIdx * 2) % groupCount;
+                const g2Idx = (pairIdx * 2 + 1) % groupCount;
+                
+                if (isFirstInPair) {
+                    tw.finals.customBracket.push({
+                        matchNum: i + 1,
+                        p1Group: groupLabels[g1Idx] || 'A',
+                        p1Rank: 1,
+                        p2Group: groupLabels[g2Idx] || 'B',
+                        p2Rank: Math.min(2, advanceCount)
+                    });
+                } else {
+                    tw.finals.customBracket.push({
+                        matchNum: i + 1,
+                        p1Group: groupLabels[g1Idx] || 'A',
+                        p1Rank: Math.min(2, advanceCount),
+                        p2Group: groupLabels[g2Idx] || 'B',
+                        p2Rank: 1
+                    });
+                }
+            }
+            
+            announce('대진이 자동 배정되었습니다');
+            render();
+        }
+        
         function setTWFormat(format) {
             window.tournamentWizard.format = format;
+            render();
+        }
+        
+        // 팀 리그용 팀 생성
+        function generateTWTeams() {
+            const tw = window.tournamentWizard;
+            const teamCount = tw.info.teamCount || 4;
+            const membersPerTeam = tw.info.membersPerTeam || 3;
+            const participants = [...tw.participants];
+            
+            // 랜덤 팀 리그인 경우 섞기
+            if (tw.info.type === 'random-team') {
+                for (let i = participants.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [participants[i], participants[j]] = [participants[j], participants[i]];
+                }
+            }
+            
+            // 팀 생성
+            tw.teams = [];
+            for (let t = 0; t < teamCount; t++) {
+                tw.teams.push({
+                    name: `${t + 1}팀`,
+                    members: []
+                });
+            }
+            
+            // 스네이크 드래프트로 배정
+            participants.forEach((p, idx) => {
+                const round = Math.floor(idx / teamCount);
+                const teamIdx = round % 2 === 0 ? idx % teamCount : teamCount - 1 - (idx % teamCount);
+                if (tw.teams[teamIdx]) {
+                    tw.teams[teamIdx].members.push(p);
+                }
+            });
+        }
+        
+        // 팀 다시 섞기
+        function shuffleTWTeams() {
+            const tw = window.tournamentWizard;
+            tw.teams = []; // 초기화
+            generateTWTeams();
+            announce('팀이 다시 편성되었습니다');
             render();
         }
         
@@ -7544,16 +8091,32 @@
         function generateTWBracket() {
             const tw = window.tournamentWizard;
             const participants = [...tw.participants];
+            const isCustom = tw.mode === 'custom';
             
-            // 참가자 섞기
-            for (let i = participants.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [participants[i], participants[j]] = [participants[j], participants[i]];
+            // 대회 형식 결정
+            let tournamentType;
+            if (isCustom) {
+                tournamentType = tw.preliminary?.enabled ? 'group-knockout' : 'knockout-only';
+            } else {
+                tournamentType = tw.template || 'group-knockout';
+            }
+            
+            // 조 편성 필요 여부
+            const needsGroups = tournamentType !== 'knockout-only';
+            
+            // 커스텀 모드에서 직접 입력이 아니거나, 템플릿 모드면 섞기
+            const shouldShuffle = isCustom ? (tw.preliminary?.groupAssignment === 'random') : true;
+            
+            if (shouldShuffle) {
+                for (let i = participants.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [participants[i], participants[j]] = [participants[j], participants[i]];
+                }
             }
             
             // 조 편성
-            if (tw.format !== 'knockout-only') {
-                const groupCount = tw.groupSettings.groupCount;
+            if (needsGroups) {
+                const groupCount = isCustom ? tw.preliminary.groupCount : (tw.preliminary?.groupCount || 4);
                 tw.groups = Array(groupCount).fill(null).map(() => []);
                 
                 // 스네이크 드래프트 방식으로 배정
@@ -7564,11 +8127,12 @@
                 });
             }
             
-            // 토너먼트 대진표 (나중에 진출자로 채움)
-            if (tw.format === 'knockout-only') {
+            // 토너먼트만인 경우 대진표 생성
+            if (tournamentType === 'knockout-only') {
+                const size = isCustom ? (tw.finals?.size || 8) : (tw.knockoutSettings?.size || participants.length);
                 tw.bracket = {
-                    size: tw.knockoutSettings.size,
-                    participants: participants.slice(0, tw.knockoutSettings.size),
+                    size: size,
+                    participants: participants.slice(0, size),
                     matches: []
                 };
             }
@@ -7576,10 +8140,47 @@
         
         function generateTWPreview() {
             const tw = window.tournamentWizard;
+            const isCustom = tw.mode === 'custom';
             let html = '';
             
+            // 대회 형식 결정
+            let tournamentType;
+            if (isCustom) {
+                tournamentType = tw.preliminary?.enabled ? 'group-knockout' : 'knockout-only';
+            } else {
+                tournamentType = tw.template || 'group-knockout';
+            }
+            
+            // 대회 규칙 표시
+            if (tw.info.rules) {
+                html += `
+                    <div style="background:#e3f2fd; padding:12px; border-radius:8px; margin-bottom:16px;">
+                        <div style="font-weight:600; margin-bottom:8px;">📋 대회 규칙</div>
+                        <div style="font-size:13px; white-space:pre-wrap;">${tw.info.rules}</div>
+                    </div>
+                `;
+            }
+            
+            // 설정 요약
+            html += `
+                <div style="background:#f5f5f5; padding:12px; border-radius:8px; margin-bottom:16px;">
+                    <div style="font-size:14px;">
+                        <strong>참가자:</strong> ${tw.participants.length}명<br>
+                        ${isCustom && tw.preliminary?.enabled ? `
+                            <strong>예선:</strong> ${tw.preliminary.groupCount}개 조, ${tw.preliminary.sets}세트<br>
+                            <strong>본선 진출:</strong> 각 조 ${tw.preliminary.advanceCount}명${tw.preliminary.wildcards > 0 ? ` + 와일드카드 ${tw.preliminary.wildcards}명` : ''}<br>
+                            <strong>본선:</strong> ${tw.finals.size}강, ${tw.finals.sets}세트
+                        ` : isCustom ? `
+                            <strong>형식:</strong> 토너먼트 ${tw.finals?.size || 8}강, ${tw.finals?.sets || 5}세트
+                        ` : `
+                            <strong>형식:</strong> ${tournamentType === 'group-only' ? '조별 리그' : tournamentType === 'knockout-only' ? '토너먼트' : '조별 예선 + 본선'}
+                        `}
+                    </div>
+                </div>
+            `;
+            
             // 조별 리그 미리보기
-            if (tw.format !== 'knockout-only' && tw.groups.length > 0) {
+            if (tournamentType !== 'knockout-only' && tw.groups && tw.groups.length > 0) {
                 html += `<h4 style="margin:0 0 12px 0;">📊 조별 리그</h4>`;
                 html += `<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:20px;">`;
                 
@@ -7601,21 +8202,35 @@
                 html += `<p style="font-size:13px; color:#666;">조별 리그 총 ${totalGroupMatches}경기</p>`;
             }
             
-            // 토너먼트 미리보기
-            if (tw.format === 'group-knockout') {
-                const advanceTotal = tw.groupSettings.groupCount * tw.groupSettings.advanceCount;
+            // 본선 토너먼트 미리보기
+            if (tournamentType === 'group-knockout') {
+                const advanceCount = isCustom ? tw.preliminary.advanceCount : (tw.preliminary?.advanceCount || 2);
+                const groupCount = isCustom ? tw.preliminary.groupCount : (tw.preliminary?.groupCount || 4);
+                const wildcards = isCustom ? (tw.preliminary.wildcards || 0) : 0;
+                const finalsSize = isCustom ? tw.finals.size : (tw.knockoutSettings?.size || 8);
+                const advanceTotal = groupCount * advanceCount + wildcards;
+                
                 html += `
                     <h4 style="margin:20px 0 12px 0;">🥊 본선 토너먼트</h4>
                     <div style="background:#fff3e0; padding:12px; border-radius:8px;">
-                        <p style="margin:0;">• ${tw.knockoutSettings.size}강 토너먼트</p>
-                        <p style="margin:4px 0 0 0;">• 각 조 상위 ${tw.groupSettings.advanceCount}명 진출 (총 ${advanceTotal}명)</p>
-                        <p style="margin:4px 0 0 0; font-size:13px; color:#666;">※ 조별 리그 완료 후 대진표 확정</p>
+                        <p style="margin:0;">• ${finalsSize}강 토너먼트</p>
+                        <p style="margin:4px 0 0 0;">• 각 조 상위 ${advanceCount}명 진출${wildcards > 0 ? ` + 와일드카드 ${wildcards}명` : ''} (총 ${advanceTotal}명)</p>
+                        ${isCustom && tw.finals.customBracket?.length > 0 ? `
+                            <p style="margin:8px 0 0 0; font-weight:600;">커스텀 대진:</p>
+                            ${tw.finals.customBracket.slice(0, 4).map((m, i) => `
+                                <p style="margin:4px 0 0 0; font-size:13px;">${i+1}경기: ${m.p1Group}조 ${m.p1Rank}위 vs ${m.p2Group}조 ${m.p2Rank}위</p>
+                            `).join('')}
+                            ${tw.finals.customBracket.length > 4 ? `<p style="margin:4px 0 0 0; font-size:13px; color:#666;">... 외 ${tw.finals.customBracket.length - 4}경기</p>` : ''}
+                        ` : `
+                            <p style="margin:4px 0 0 0; font-size:13px; color:#666;">※ 조별 리그 완료 후 대진표 확정</p>
+                        `}
                     </div>
                 `;
-            } else if (tw.format === 'knockout-only') {
+            } else if (tournamentType === 'knockout-only') {
+                const finalsSize = isCustom ? (tw.finals?.size || 8) : (tw.knockoutSettings?.size || 8);
                 html += `<h4 style="margin:0 0 12px 0;">🥊 토너먼트 대진표</h4>`;
                 html += `<div style="background:#fff3e0; padding:12px; border-radius:8px;">`;
-                html += `<p style="margin:0;">${tw.knockoutSettings.size}강 토너먼트</p>`;
+                html += `<p style="margin:0;">${finalsSize}강 토너먼트</p>`;
                 
                 const bracket = tw.bracket;
                 if (bracket && bracket.participants) {
@@ -7638,25 +8253,75 @@
             
             if (!confirm('대진표를 확정하고 대회를 생성하시겠습니까?')) return;
             
+            // 세트 수 결정 (커스텀 모드 vs 템플릿 모드)
+            const isCustom = tw.mode === 'custom';
+            const preliminarySets = isCustom ? (tw.preliminary?.sets || 3) : (tw.preliminary?.sets || 3);
+            const finalsSets = isCustom ? (tw.finals?.sets || 5) : (tw.preliminary?.sets || 3);
+            const isTeam = tw.info.type === 'team';
+            const winScore = isTeam ? 31 : 11;
+            
+            // 대회 형식 결정
+            let tournamentType;
+            if (isCustom) {
+                tournamentType = tw.preliminary?.enabled ? 'group-knockout' : 'knockout-only';
+            } else {
+                tournamentType = tw.template || 'group-knockout';
+            }
+            
             // 프로젝트 생성
             const project = {
                 id: Date.now(),
                 name: tw.info.name,
                 date: tw.info.date,
                 location: tw.info.location,
-                competitionType: tw.info.type,
-                players: tw.info.type === 'individual' ? tw.participants : [],
-                teams: tw.info.type === 'team' ? tw.participants.map(t => ({ name: t, players: [] })) : [],
-                tournamentType: tw.format,
+                rules: tw.info.rules || '',
+                competitionType: isTeam ? 'team' : 'individual',
+                players: !isTeam ? tw.participants : [],
+                teams: isTeam ? tw.participants.map(t => ({ name: t, players: [] })) : [],
+                tournamentType: tournamentType,
                 groups: [],
                 matches: [],
                 bracket: tw.bracket,
+                customBracket: tw.finals?.customBracket || [],
+                preliminarySets: preliminarySets,
+                finalsSets: finalsSets,
+                advanceCount: tw.preliminary?.advanceCount || 2,
+                wildcards: tw.preliminary?.wildcards || 0,
+                sameGroupAvoid: tw.finals?.sameGroupAvoid || 'quarterfinal',
                 createdAt: new Date().toISOString()
             };
             
-            // 조별 리그 설정
-            if (tw.format !== 'knockout-only') {
-                project.groups = tw.groups.map((members, idx) => ({
+            // 조 편성 (커스텀 또는 템플릿 모두)
+            const needsGroups = (isCustom && tw.preliminary?.enabled) || 
+                               (!isCustom && tournamentType !== 'knockout-only');
+            
+            if (needsGroups) {
+                const participants = [...tw.participants];
+                const groupCount = isCustom ? tw.preliminary.groupCount : (tw.preliminary?.groupCount || 4);
+                
+                // 편성 방식에 따라 처리
+                if (isCustom && tw.preliminary.groupAssignment === 'random') {
+                    for (let i = participants.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [participants[i], participants[j]] = [participants[j], participants[i]];
+                    }
+                } else if (!isCustom) {
+                    // 템플릿 모드는 기본 랜덤
+                    for (let i = participants.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [participants[i], participants[j]] = [participants[j], participants[i]];
+                    }
+                }
+                
+                // 스네이크 드래프트로 조 배정
+                const groups = Array(groupCount).fill(null).map(() => []);
+                participants.forEach((p, idx) => {
+                    const round = Math.floor(idx / groupCount);
+                    const groupIdx = round % 2 === 0 ? idx % groupCount : groupCount - 1 - (idx % groupCount);
+                    groups[groupIdx].push(p);
+                });
+                
+                project.groups = groups.map((members, idx) => ({
                     name: String.fromCharCode(65 + idx) + '조',
                     members: members,
                     matches: [],
@@ -7672,9 +8337,9 @@
                                 id: Date.now() + gIdx * 1000 + i * 100 + j,
                                 player1Name: members[i],
                                 player2Name: members[j],
-                                type: tw.info.type,
-                                sets: tw.info.type === 'individual' ? 3 : 1,
-                                winScore: tw.info.type === 'individual' ? 11 : 31,
+                                type: isTeam ? 'team' : 'individual',
+                                sets: isTeam ? 1 : preliminarySets,
+                                winScore: winScore,
                                 currentSet: 1,
                                 setScores: [{ player1: 0, player2: 0 }],
                                 currentServe: 'player1',
@@ -7685,6 +8350,7 @@
                                 status: 'pending',
                                 groupIndex: gIdx,
                                 groupName: group.name,
+                                phase: 'preliminary',
                                 refereePin: generatePin()
                             };
                             project.matches.push(match);
@@ -7694,20 +8360,29 @@
                 });
             }
             
-            // 토너먼트만인 경우 바로 경기 생성
-            if (tw.format === 'knockout-only' && tw.bracket) {
-                for (let i = 0; i < tw.bracket.participants.length; i += 2) {
-                    const p1 = tw.bracket.participants[i];
-                    const p2 = tw.bracket.participants[i + 1];
+            // 토너먼트만인 경우 바로 본선 경기 생성
+            if (tournamentType === 'knockout-only') {
+                const participants = [...tw.participants];
+                const size = isCustom ? (tw.finals?.size || 8) : (tw.knockoutSettings?.size || participants.length);
+                
+                // 랜덤 섞기
+                for (let i = participants.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [participants[i], participants[j]] = [participants[j], participants[i]];
+                }
+                
+                for (let i = 0; i < Math.min(participants.length, size); i += 2) {
+                    const p1 = participants[i];
+                    const p2 = participants[i + 1];
                     
                     if (p1 && p2) {
                         const match = {
                             id: Date.now() + i,
                             player1Name: p1,
                             player2Name: p2,
-                            type: tw.info.type,
-                            sets: tw.info.type === 'individual' ? 3 : 1,
-                            winScore: tw.info.type === 'individual' ? 11 : 31,
+                            type: isTeam ? 'team' : 'individual',
+                            sets: isTeam ? 1 : finalsSets,
+                            winScore: winScore,
                             currentSet: 1,
                             setScores: [{ player1: 0, player2: 0 }],
                             currentServe: 'player1',
@@ -7718,6 +8393,7 @@
                             status: 'pending',
                             bracketRound: 1,
                             bracketMatchNum: i / 2 + 1,
+                            phase: 'finals',
                             refereePin: generatePin()
                         };
                         project.matches.push(match);
@@ -8646,6 +9322,132 @@
             const items = Array.from(container.children);
             items.reverse().forEach(item => container.appendChild(item));
         }
+        
+        // 빠른 프로젝트 - 세트 수 표시 토글
+        function updateQPSets() {
+            const type = document.getElementById('qp-type').value;
+            const setsGroup = document.getElementById('qp-sets-group');
+            if (setsGroup) {
+                setsGroup.style.display = type === 'team' ? 'none' : 'block';
+            }
+        }
+        
+        // 빠른 프로젝트 생성
+        function createQuickProject() {
+            const name = document.getElementById('qp-name').value.trim();
+            if (!name) {
+                alert('프로젝트 이름을 입력해주세요.');
+                return;
+            }
+            
+            const participantsText = document.getElementById('qp-participants').value.trim();
+            if (!participantsText) {
+                alert('참가자를 입력해주세요.');
+                return;
+            }
+            
+            // 참가자 파싱 (줄바꿈 또는 쉼표로 구분)
+            const participants = participantsText
+                .split(/[\n,]+/)
+                .map(p => p.trim())
+                .filter(p => p.length > 0);
+            
+            if (participants.length < 2) {
+                alert('최소 2명 이상의 참가자가 필요합니다.');
+                return;
+            }
+            
+            const type = document.getElementById('qp-type').value;
+            const sets = type === 'team' ? 1 : parseInt(document.getElementById('qp-sets').value);
+            const format = document.getElementById('qp-format').value;
+            const isTeam = type === 'team';
+            const winScore = isTeam ? 31 : 11;
+            
+            // 프로젝트 생성
+            const project = {
+                id: Date.now(),
+                name: name,
+                date: new Date().toISOString().split('T')[0],
+                location: '',
+                competitionType: isTeam ? 'team' : 'individual',
+                players: isTeam ? [] : participants,
+                teams: isTeam ? participants.map(t => ({ name: t, players: [] })) : [],
+                tournamentType: format === 'full-league' ? 'group-only' : 'knockout-only',
+                groups: [],
+                matches: [],
+                preliminarySets: sets,
+                finalsSets: sets,
+                createdAt: new Date().toISOString(),
+                isQuickProject: true
+            };
+            
+            // 경기 생성
+            if (format === 'full-league') {
+                // 풀리그: 모든 조합
+                for (let i = 0; i < participants.length; i++) {
+                    for (let j = i + 1; j < participants.length; j++) {
+                        const match = {
+                            id: Date.now() + i * 100 + j,
+                            player1Name: participants[i],
+                            player2Name: participants[j],
+                            type: isTeam ? 'team' : 'individual',
+                            sets: sets,
+                            winScore: winScore,
+                            currentSet: 1,
+                            setScores: [{ player1: 0, player2: 0 }],
+                            currentServe: 'player1',
+                            serveCount: 0,
+                            serveSelected: false,
+                            timeouts: { player1: 1, player2: 1 },
+                            history: [],
+                            status: 'pending',
+                            refereePin: generatePin()
+                        };
+                        project.matches.push(match);
+                    }
+                }
+            } else {
+                // 토너먼트: 순서대로 매칭
+                const shuffled = [...participants];
+                // 랜덤 섞기
+                for (let i = shuffled.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                }
+                
+                for (let i = 0; i < shuffled.length - 1; i += 2) {
+                    const match = {
+                        id: Date.now() + i,
+                        player1Name: shuffled[i],
+                        player2Name: shuffled[i + 1] || 'BYE',
+                        type: isTeam ? 'team' : 'individual',
+                        sets: sets,
+                        winScore: winScore,
+                        currentSet: 1,
+                        setScores: [{ player1: 0, player2: 0 }],
+                        currentServe: 'player1',
+                        serveCount: 0,
+                        serveSelected: false,
+                        timeouts: { player1: 1, player2: 1 },
+                        history: [],
+                        status: 'pending',
+                        bracketRound: 1,
+                        bracketMatchNum: i / 2 + 1,
+                        refereePin: generatePin()
+                    };
+                    project.matches.push(match);
+                }
+            }
+            
+            // 프로젝트 저장
+            projects.push(project);
+            saveProjects();
+            
+            // 생성된 프로젝트로 이동
+            currentProject = project;
+            announce(`${project.name} 프로젝트가 생성되었습니다. ${project.matches.length}경기`);
+            goTo('project-list');
+        }
 
         // 심판 연습 모드 경기 시작
         function startPracticeMatch() {
@@ -8681,6 +9483,7 @@
                 serveSelected: false, // 서브 미선택 상태
                 timeouts: { player1: 1, player2: 1 },
                 history: [],
+                warmupUsed: false,
                 status: 'in-progress',
                 isPractice: true
             };
@@ -8768,11 +9571,15 @@
             render();
         }
 
-        // 워밍업 시작
+        // 워밍업 시작 (IBSA 규칙: 경기당 1회, 90초)
         function startWarmup() {
+            // 경기당 워밍업 1회만 사용 가능
+            currentMatch.warmupUsed = true;
+            saveProjects();
+            
             warmupActive = true;
-            warmupSeconds = 60;
-            announce('워밍업 1분 시작');
+            warmupSeconds = 90; // IBSA 규칙: 90초
+            announce('워밍업 90초 시작');
             render();
             
             warmupTimer = setInterval(() => {
@@ -8780,6 +9587,13 @@
                 const display = document.getElementById('warmup-timer');
                 if (display) {
                     display.textContent = `${Math.floor(warmupSeconds / 60)}:${(warmupSeconds % 60).toString().padStart(2, '0')}`;
+                }
+                
+                // 30초마다 안내 (IBSA 규칙)
+                if (warmupSeconds === 60) {
+                    announce('워밍업 60초 남음');
+                } else if (warmupSeconds === 30) {
+                    announce('워밍업 30초 남음');
                 }
                 
                 if (warmupSeconds <= 0) {
