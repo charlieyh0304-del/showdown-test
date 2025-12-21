@@ -487,17 +487,19 @@
     </div>
 
     <!-- PIN 입력 모달 -->
-    <div id="pin-modal" class="modal">
+    <div id="pin-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="pin-modal-title">
         <div class="modal-content" style="max-width:320px;">
-            <h2 style="text-align:center;">🔐 심판 PIN 입력</h2>
-            <p style="text-align:center; color:#666; font-size:14px; margin-bottom:16px;">경기 관리를 위해 PIN을 입력하세요</p>
+            <h2 id="pin-modal-title" style="text-align:center;">🔐 심판 PIN 입력</h2>
+            <p id="pin-modal-desc" style="text-align:center; color:#666; font-size:14px; margin-bottom:16px;">경기 관리를 위해 PIN을 입력하세요</p>
+            <label for="pin-input" class="sr-only">심판 PIN 입력</label>
             <input type="password" id="pin-input" placeholder="PIN 입력" 
+                   aria-describedby="pin-modal-desc pin-error"
                    style="width:100%; padding:16px; font-size:20px; text-align:center; border:2px solid #ddd; border-radius:8px; letter-spacing:4px;"
                    maxlength="8" inputmode="numeric">
-            <div id="pin-error" style="color:#f44336; text-align:center; margin-top:8px; display:none;">PIN이 틀렸습니다</div>
+            <div id="pin-error" role="alert" aria-live="polite" style="color:#f44336; text-align:center; margin-top:8px; display:none;">PIN이 틀렸습니다</div>
             <div style="display:flex; gap:8px; margin-top:16px;">
-                <button class="btn" onclick="closePinModal()" style="flex:1;">취소</button>
-                <button class="btn btn-primary" onclick="verifyPin()" style="flex:1;">확인</button>
+                <button class="btn" onclick="closePinModal()" style="flex:1;" aria-label="PIN 입력 취소">취소</button>
+                <button class="btn btn-primary" onclick="verifyPin()" style="flex:1;" aria-label="PIN 확인">확인</button>
             </div>
         </div>
     </div>
@@ -583,11 +585,12 @@
         let isAuthenticated = false; // 심판 인증 여부
         let isPaused = false; // 경기 일시정지 상태
         let warmupActive = false; // 워밍업 진행 상태
-        let warmupSeconds = 90; // 워밍업 남은 시간 (IBSA: 90초)
+        let warmupSeconds = 60; // 워밍업 남은 시간 (IBSA: 개인전 60초)
         let warmupTimer = null; // 워밍업 타이머
         let pauseTimer = null; // 일시정지 타이머
         let pauseSeconds = 0; // 일시정지 경과 시간
         let isOffline = !navigator.onLine; // 오프라인 상태
+        let userRole = null; // 'referee' 또는 'viewer'
         
         // 오프라인 감지
         window.addEventListener('online', () => {
@@ -602,15 +605,20 @@
         
         // 오프라인 데이터 동기화
         function syncOfflineData() {
-            const offlineData = JSON.parse(localStorage.getItem('offlineQueue') || '[]');
-            if (offlineData.length > 0 && database) {
-                offlineData.forEach(item => {
-                    if (item.type === 'project') {
-                        database.ref('projects/' + item.key).set(item.data);
-                    }
-                });
-                localStorage.removeItem('offlineQueue');
-                console.log('오프라인 데이터 동기화 완료');
+            try {
+                const offlineData = JSON.parse(localStorage.getItem('offlineQueue') || '[]');
+                if (offlineData.length > 0 && database) {
+                    offlineData.forEach(item => {
+                        if (item.type === 'project') {
+                            database.ref('projects/' + item.key).set(item.data);
+                        }
+                    });
+                    localStorage.removeItem('offlineQueue');
+                    console.log('오프라인 데이터 동기화 완료');
+                }
+            } catch (error) {
+                console.error('오프라인 데이터 동기화 오류:', error);
+                localStorage.removeItem('offlineQueue'); // 손상된 데이터 제거
             }
         }
         
@@ -623,7 +631,13 @@
             try {
                 if (!database) {
                     console.log('Firebase 미연결 - 로컬 모드');
-                    projects = JSON.parse(localStorage.getItem('projects') || '[]');
+                    try {
+                        projects = JSON.parse(localStorage.getItem('projects') || '[]');
+                    } catch (parseError) {
+                        console.error('로컬 데이터 파싱 오류:', parseError);
+                        projects = [];
+                        localStorage.removeItem('projects'); // 손상된 데이터 제거
+                    }
                     checkUrlProjectParam();
                     render();
                     return;
@@ -683,7 +697,12 @@
                 });
             } catch (error) {
                 console.log('Firebase 로드 실패 - 로컬 모드:', error);
-                projects = JSON.parse(localStorage.getItem('projects') || '[]');
+                try {
+                    projects = JSON.parse(localStorage.getItem('projects') || '[]');
+                } catch (parseError) {
+                    console.error('로컬 데이터 파싱 오류:', parseError);
+                    projects = [];
+                }
                 checkUrlProjectParam();
                 render();
             }
@@ -923,7 +942,7 @@
                                 <div style="background:#f5f5f5; padding:12px; border-radius:8px;">
                                     <div style="font-weight:600; margin-bottom:8px; color:#1976d2; display:flex; justify-content:space-between;">
                                         <span>${g.name}</span>
-                                        <button class="btn" onclick="editGroup(${gIdx})" style="padding:2px 8px; min-width:auto; font-size:12px;">✏️</button>
+                                        <button class="btn" onclick="editGroup(${gIdx})" style="padding:2px 8px; min-width:auto; font-size:12px;">✏️ 수정</button>
                                     </div>
                                     ${g.members.map((m, i) => `<div style="font-size:13px; padding:4px 0;">${i+1}. ${m}</div>`).join('')}
                                 </div>
@@ -940,16 +959,19 @@
                     
                     matchesHTML = `
                         <h3>⚔️ 경기 목록 (${p.matches.length}경기)</h3>
-                        <div style="max-height:300px; overflow-y:auto;">
+                        <div style="max-height:400px; overflow-y:auto;">
                             ${pendingMatches.length > 0 ? `
                                 <div style="font-size:13px; color:#666; margin-bottom:8px;">대기 중 (${pendingMatches.length})</div>
-                                ${pendingMatches.slice(0, 10).map(m => `
-                                    <div style="padding:10px; margin:4px 0; background:#fff3e0; border-radius:6px; display:flex; justify-content:space-between; align-items:center;">
-                                        <span>${m.groupName ? `[${m.groupName}] ` : ''}${m.player1Name} vs ${m.player2Name}</span>
-                                        <button class="btn" onclick="editMatch(${m.id})" style="padding:2px 8px; min-width:auto; font-size:12px;">✏️</button>
+                                ${pendingMatches.slice(0, 15).map(m => `
+                                    <div style="padding:10px; margin:4px 0; background:#fff3e0; border-radius:6px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                                        <span style="flex:1;">${m.groupName ? `[${m.groupName}] ` : ''}${m.player1Name} vs ${m.player2Name}</span>
+                                        <div style="display:flex; gap:4px;">
+                                            <button class="btn btn-primary" onclick="startMatchFromBracket(${m.id})" style="padding:4px 10px; min-width:auto; font-size:12px;">▶️ 시작</button>
+                                            <button class="btn" onclick="editMatch(${m.id})" style="padding:4px 8px; min-width:auto; font-size:12px;">✏️</button>
+                                        </div>
                                     </div>
                                 `).join('')}
-                                ${pendingMatches.length > 10 ? `<div style="text-align:center; color:#666; padding:8px;">...외 ${pendingMatches.length - 10}경기</div>` : ''}
+                                ${pendingMatches.length > 15 ? `<div style="text-align:center; color:#666; padding:8px;">...외 ${pendingMatches.length - 15}경기</div>` : ''}
                             ` : ''}
                             ${completedMatches.length > 0 ? `
                                 <div style="font-size:13px; color:#666; margin:12px 0 8px 0;">완료됨 (${completedMatches.length})</div>
@@ -3488,10 +3510,11 @@
                         // 경기당 워밍업 1회만 (IBSA 규칙)
                         const warmupUsed = currentMatch.warmupUsed || false;
                         const canUseWarmup = isAuthenticated && !warmupActive && !warmupUsed;
+                        const warmupTime = (currentMatch.type === 'team') ? 90 : 60; // IBSA: 개인전 60초, 팀전 90초
                         return canUseWarmup ? `
                         <div style="text-align:center; margin-bottom:16px;">
                             <button class="btn" onclick="startWarmup()" style="background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%); color:white;">
-                                🔥 워밍업 90초 시작
+                                🔥 워밍업 ${warmupTime}초 시작
                             </button>
                         </div>
                     ` : '';
@@ -3825,8 +3848,6 @@
                 ` : ''}
             `;
         }
-
-        let userRole = null; // 'referee' 또는 'viewer'
         
         function selectRole(role) {
             userRole = role;
@@ -4206,7 +4227,8 @@
             });
             
             currentMatch.serveCount++;
-            const maxServes = currentMatch.type === 'individual' ? 2 : 3;
+            // IBSA 규칙: 개인전 2회, 팀전 3회 (type 없으면 개인전으로 처리)
+            const maxServes = (currentMatch.type === 'team') ? 3 : 2;
             if (currentMatch.serveCount >= maxServes) {
                 currentMatch.currentServe = currentMatch.currentServe === 'player1' ? 'player2' : 'player1';
                 currentMatch.serveCount = 0;
@@ -4310,7 +4332,7 @@
             currentMatch.serveCount--;
             if (currentMatch.serveCount < 0) {
                 currentMatch.currentServe = currentMatch.currentServe === 'player1' ? 'player2' : 'player1';
-                const maxServes = currentMatch.type === 'individual' ? 2 : 3;
+                const maxServes = (currentMatch.type === 'team') ? 3 : 2;
                 currentMatch.serveCount = maxServes - 1;
             }
             
@@ -9073,6 +9095,38 @@
             }
         }
         
+        // 대진표에서 경기 시작
+        function startMatchFromBracket(matchId) {
+            const p = currentProject;
+            if (!p) return;
+            
+            const match = p.matches.find(m => m.id === matchId);
+            if (!match) {
+                alert('경기를 찾을 수 없습니다.');
+                return;
+            }
+            
+            // PIN 확인
+            if (match.refereePin) {
+                const inputPin = prompt('🔐 심판 PIN을 입력하세요:');
+                if (inputPin !== match.refereePin) {
+                    alert('❌ PIN이 틀렸습니다.');
+                    return;
+                }
+            }
+            
+            // 경기 상태 변경
+            match.status = 'in-progress';
+            saveProjects();
+            
+            // 경기 화면으로 이동
+            currentMatch = match;
+            isAuthenticated = true;
+            screen = 'match';
+            announce(`${match.player1Name} 대 ${match.player2Name} 경기를 시작합니다.`);
+            render();
+        }
+        
         function editMatch(matchId) {
             const p = currentProject;
             if (!p) return;
@@ -9456,9 +9510,9 @@
             const player1 = document.getElementById('practice-player1').value.trim() || '선수 A';
             const player2 = document.getElementById('practice-player2').value.trim() || '선수 B';
             
-            // 연습용 임시 프로젝트 생성
+            // 연습용 프로젝트 생성 (Firebase 동기화됨)
             const practiceProject = {
-                id: 'practice_' + Date.now(),
+                id: Date.now(),
                 name: '🎯 연습 경기',
                 date: new Date().toISOString().split('T')[0],
                 location: '연습',
@@ -9469,7 +9523,8 @@
             
             // 연습 경기 생성
             const practiceMatch = {
-                id: Date.now(),
+                id: Date.now() + 1,
+                type: type, // 개인전/팀전 구분 - 서브 횟수에 영향
                 player1Name: player1,
                 player2Name: player2,
                 mainReferee: '연습',
@@ -9489,6 +9544,10 @@
             };
             
             practiceProject.matches.push(practiceMatch);
+            
+            // 프로젝트 저장 (Firebase 동기화)
+            projects.push(practiceProject);
+            saveProjects();
             
             // 현재 프로젝트/경기 설정
             currentProject = practiceProject;
@@ -9571,15 +9630,16 @@
             render();
         }
 
-        // 워밍업 시작 (IBSA 규칙: 경기당 1회, 90초)
+        // 워밍업 시작 (IBSA 규칙: 개인전 60초, 팀전 90초)
         function startWarmup() {
             // 경기당 워밍업 1회만 사용 가능
             currentMatch.warmupUsed = true;
             saveProjects();
             
             warmupActive = true;
-            warmupSeconds = 90; // IBSA 규칙: 90초
-            announce('워밍업 90초 시작');
+            // IBSA 규칙: 개인전 60초, 팀전 90초 (type 없으면 개인전으로 처리)
+            warmupSeconds = (currentMatch.type === 'team') ? 90 : 60;
+            announce(`워밍업 ${warmupSeconds}초 시작`);
             render();
             
             warmupTimer = setInterval(() => {
@@ -9589,7 +9649,7 @@
                     display.textContent = `${Math.floor(warmupSeconds / 60)}:${(warmupSeconds % 60).toString().padStart(2, '0')}`;
                 }
                 
-                // 30초마다 안내 (IBSA 규칙)
+                // 30초마다 안내 (IBSA 규칙 - 팀전)
                 if (warmupSeconds === 60) {
                     announce('워밍업 60초 남음');
                 } else if (warmupSeconds === 30) {
