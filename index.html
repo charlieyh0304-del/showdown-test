@@ -529,6 +529,13 @@
             console.log('Firebase 연결 실패 - 로컬 모드');
         }
         
+        // 심판 비밀번호 초기화 (첫 실행 시)
+        if (!localStorage.getItem('refereePasswordsInitialized')) {
+            localStorage.setItem('refereePasswords', JSON.stringify({}));
+            localStorage.setItem('refereePasswordsInitialized', 'true');
+            console.log('✅ 심판 비밀번호 시스템 초기화됨');
+        }
+        
         // ✨ 사용자 ID 초기화 함수
         function initializeUserId() {
             userId = localStorage.getItem('userId');
@@ -876,6 +883,10 @@
                     </div>
                     
                     <div class="card">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
+                            <button type="button" class="btn" onclick="changeRefereePassword()" style="background:#2196f3; color:white;" aria-label="비밀번호 변경">🔐 비밀번호</button>
+                            <button type="button" class="btn" onclick="logout()" style="background:#666; color:white;" aria-label="로그아웃">🚪 로그아웃</button>
+                        </div>
                         <button type="button" role="button" class="btn" onclick="goTo('home')" aria-label="모드 선택 화면으로 돌아가기">← 모드 선택으로</button>
                     </div>
                 `;
@@ -914,6 +925,14 @@
                     <div class="card">
                         <h3>📋 대회 목록</h3>
                         ${tournamentList}
+                    </div>
+                    <div class="card">
+                        <h3>👥 심판 관리</h3>
+                        <p style="font-size:13px; color:var(--text-secondary); margin-bottom:12px;">심판 비밀번호를 추가/삭제합니다</p>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                            <button type="button" class="btn btn-success" onclick="addRefereePassword()" style="width:100%;" aria-label="심판 추가">➕ 심판 추가</button>
+                            <button type="button" class="btn btn-danger" onclick="deleteRefereePassword()" style="width:100%;" aria-label="심판 삭제">🗑️ 심판 삭제</button>
+                        </div>
                     </div>
                     <div class="card">
                         <button type="button" class="btn" onclick="goTo('home')" aria-label="모드 선택으로">← 모드 선택으로</button>
@@ -1120,6 +1139,49 @@
                         <button type="button" class="btn" onclick="goTo('bracket-password')" style="width:100%; margin-top:8px;">← 돌아가기</button>
                     </div>
                 `;
+            }
+            else if (screen === 'referee-password') {
+                // 심판 비밀번호 입력
+                const refPasswords = JSON.parse(localStorage.getItem('refereePasswords') || '{}');
+                const refPins = Object.keys(refPasswords);
+                
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #34a853 0%, #1b5e20 100%);">
+                        <h1 style="color:white;">🔐 심판 모드</h1>
+                        <p style="color:rgba(255,255,255,0.9);">심판 인증</p>
+                    </div>
+                    <div class="card">
+                        <div style="text-align:center; margin-bottom:20px;">
+                            <span style="font-size:48px;">🔐</span>
+                            <h3>심판 인증</h3>
+                            <p style="color:var(--text-secondary); font-size:14px;">심판 정보를 입력하세요</p>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>심판 PIN *</label>
+                            <select id="referee-pin" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px;">
+                                <option value="">심판 선택...</option>
+                                ${refPins.map(pin => `<option value="${pin}">${pin}</option>`).join('')}
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>비밀번호</label>
+                            <input type="password" id="referee-password" placeholder="비밀번호 입력" style="width:100%;">
+                        </div>
+                        
+                        <button type="button" class="btn btn-primary" onclick="verifyRefereePassword()" style="width:100%;">인증</button>
+                        
+                        <button type="button" class="btn" onclick="goTo('home')" style="width:100%; margin-top:12px;">← 모드 선택으로</button>
+                    </div>
+                `;
+                
+                setTimeout(() => {
+                    document.getElementById('referee-pin')?.focus();
+                    document.getElementById('referee-password')?.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') verifyRefereePassword();
+                    });
+                }, 100);
             }
             else if (screen === 'viewer-home') {
                 app.innerHTML = `
@@ -4094,8 +4156,13 @@
         function selectRole(role) {
             userRole = role;
             if (role === 'referee') {
-                isAuthenticated = true; // 심판 모드는 인증됨
-                screen = 'referee-home';
+                // 심판 모드 - 비밀번호 확인
+                const refPasswords = JSON.parse(localStorage.getItem('refereePasswords') || '{}');
+                if (Object.keys(refPasswords).length === 0) {
+                    alert('⚠️ 등록된 심판이 없습니다.\n관리자에게 문의해주세요.');
+                    return;
+                }
+                screen = 'referee-password';
             } else {
                 isAuthenticated = false; // 관람 모드는 인증 안 됨
                 screen = 'viewer-home';
@@ -8770,6 +8837,143 @@
             bracketModeAuth = true;
             announce('비밀번호가 설정되었습니다');
             goTo('bracket-home');
+        }
+        
+        // ========== 심판 비밀번호 관리 ==========
+        function logout() {
+            sessionStorage.removeItem('refereePin');
+            sessionStorage.removeItem('refereeAuth');
+            isAuthenticated = false;
+            userRole = null;
+            announce('로그아웃되었습니다');
+            goTo('home');
+        }
+        
+        function verifyRefereePassword() {
+            const pin = document.getElementById('referee-pin')?.value;
+            const password = document.getElementById('referee-password')?.value;
+            const refPasswords = JSON.parse(localStorage.getItem('refereePasswords') || '{}');
+            
+            if (!pin) {
+                alert('심판을 선택해주세요');
+                return;
+            }
+            
+            if (!password) {
+                alert('비밀번호를 입력해주세요');
+                return;
+            }
+            
+            if (!refPasswords[pin]) {
+                alert('등록되지 않은 심판입니다');
+                return;
+            }
+            
+            if (refPasswords[pin] !== password) {
+                alert('❌ 비밀번호가 일치하지 않습니다');
+                document.getElementById('referee-password').value = '';
+                document.getElementById('referee-password').focus();
+                return;
+            }
+            
+            // 인증 성공
+            isAuthenticated = true;
+            sessionStorage.setItem('refereePin', pin);
+            sessionStorage.setItem('refereeAuth', 'true');
+            announce('✅ 심판 인증 완료');
+            screen = 'referee-home';
+            render();
+        }
+        
+        // 심판 비밀번호 추가 (관리자용)
+        function addRefereePassword() {
+            const pin = prompt('심판 PIN을 입력하세요:\n(예: REF001, 심판1)');
+            if (!pin) return;
+            
+            const password = prompt('심판 비밀번호를 입력하세요:\n(8자 이상, 대소문자+숫자+특수문자)');
+            if (!password) return;
+            
+            const error = validatePassword(password);
+            if (error) {
+                alert(error);
+                return;
+            }
+            
+            const confirmPassword = prompt('비밀번호를 다시 입력하세요:');
+            if (confirmPassword !== password) {
+                alert('비밀번호가 일치하지 않습니다');
+                return;
+            }
+            
+            const refPasswords = JSON.parse(localStorage.getItem('refereePasswords') || '{}');
+            if (refPasswords[pin]) {
+                alert('이미 등록된 심판입니다');
+                return;
+            }
+            
+            refPasswords[pin] = password;
+            localStorage.setItem('refereePasswords', JSON.stringify(refPasswords));
+            announce(`✅ ${pin} 심판이 등록되었습니다`);
+        }
+        
+        // 심판 비밀번호 삭제 (관리자용)
+        function deleteRefereePassword() {
+            const refPasswords = JSON.parse(localStorage.getItem('refereePasswords') || '{}');
+            const pins = Object.keys(refPasswords);
+            
+            if (pins.length === 0) {
+                alert('등록된 심판이 없습니다');
+                return;
+            }
+            
+            const pinList = pins.join('\n');
+            const pin = prompt(`삭제할 심판 PIN을 입력하세요:\n\n등록된 심판:\n${pinList}`);
+            
+            if (!pin) return;
+            
+            if (!refPasswords[pin]) {
+                alert('등록되지 않은 심판입니다');
+                return;
+            }
+            
+            if (!confirm(`${pin} 심판을 삭제하시겠습니까?`)) return;
+            
+            delete refPasswords[pin];
+            localStorage.setItem('refereePasswords', JSON.stringify(refPasswords));
+            announce(`✅ ${pin} 심판이 삭제되었습니다`);
+        }
+        
+        // 심판 비밀번호 변경 (심판 자신)
+        function changeRefereePassword() {
+            const pin = sessionStorage.getItem('refereePin');
+            const currentPassword = prompt('현재 비밀번호를 입력하세요:');
+            if (!currentPassword) return;
+            
+            const refPasswords = JSON.parse(localStorage.getItem('refereePasswords') || '{}');
+            
+            if (refPasswords[pin] !== currentPassword) {
+                alert('현재 비밀번호가 일치하지 않습니다');
+                return;
+            }
+            
+            const newPassword = prompt('새 비밀번호를 입력하세요:\n(8자 이상, 대소문자+숫자+특수문자)');
+            if (!newPassword) return;
+            
+            const error = validatePassword(newPassword);
+            if (error) {
+                alert(error);
+                return;
+            }
+            
+            const confirmPassword = prompt('비밀번호를 다시 입력하세요:');
+            if (confirmPassword !== newPassword) {
+                alert('비밀번호가 일치하지 않습니다');
+                return;
+            }
+            
+            refPasswords[pin] = newPassword;
+            localStorage.setItem('refereePasswords', JSON.stringify(refPasswords));
+            announce('✅ 비밀번호가 변경되었습니다');
         }
         
         // ========== 선수 일정 조회 함수 ==========
