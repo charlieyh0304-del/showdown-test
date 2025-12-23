@@ -10,7 +10,7 @@
     <meta name="apple-mobile-web-app-title" content="쇼다운">
     
     <!-- 🔢 앱 버전 (업데이트 시 이 숫자만 증가시키세요!) -->
-    <meta name="app-version" content="2.1.1">
+    <meta name="app-version" content="2.1.0">
     
     <title>쇼다운 심판 앱 PRO</title>
     
@@ -974,11 +974,37 @@
             localStorage.setItem('projects', JSON.stringify(projects));
         }
         
-        // 페이지 로드 시 바로 화면 표시
+        // 페이지 로드 시 초기화 순서 보장
         document.addEventListener('DOMContentLoaded', function() {
-            // 즉시 홈 화면 렌더링
-            if (typeof render === 'function') {
-                render();
+            console.log('🚀 앱 초기화 시작...');
+            
+            // 1. 기본 UI 즉시 표시 (로딩 상태)
+            const app = document.getElementById('app');
+            if (app) {
+                app.innerHTML = '<div style="text-align:center; padding:50px; font-size:16px;">⏳ 데이터를 불러오는 중입니다...</div>';
+            }
+            
+            // 2. 로컬 데이터 우선 복구
+            try {
+                const localProjects = localStorage.getItem('projects');
+                if (localProjects) {
+                    projects = JSON.parse(localProjects);
+                    console.log('📦 로컬 데이터 복구 완료:', projects.length, '개');
+                }
+            } catch (e) {
+                console.error('❌ 로컬 데이터 파싱 에러:', e);
+                localStorage.removeItem('projects');
+            }
+            
+            // 3. Firebase 및 데이터 로드 실행
+            if (typeof loadProjects === 'function') {
+                loadProjects();
+            } else {
+                // Firebase 없을 경우 즉시 렌더링
+                console.log('📍 Firebase 없음 - 즉시 렌더링');
+                if (typeof render === 'function') {
+                    render();
+                }
             }
         });
         
@@ -1184,11 +1210,11 @@
         function loadProjects() {
             try {
                 if (!database) {
-                    console.log('Firebase 미연결 - 로컬 모드');
+                    console.log('🔌 Firebase 미연결 - 로컬 모드');
                     try {
                         projects = JSON.parse(localStorage.getItem('projects') || '[]');
                     } catch (parseError) {
-                        console.error('로컬 데이터 파싱 오류:', parseError);
+                        console.error('❌ 로컬 데이터 파싱 오류:', parseError);
                         projects = [];
                         localStorage.removeItem('projects'); // 손상된 데이터 제거
                     }
@@ -1196,15 +1222,24 @@
                     render();
                     return;
                 }
-                console.log('Firebase에서 프로젝트 로드 중...');
+                console.log('🔄 Firebase에서 프로젝트 로드 중...');
                 
                 let isFirstLoad = true;
                 database.ref('projects').on('value', (snapshot) => {
                     const data = snapshot.val();
                     projects = data ? Object.keys(data).map(key => ({...data[key], firebaseKey: key})) : [];
-                    console.log('로드된 프로젝트:', projects.length);
                     
-                    // 첫 로드시 URL 파라미터 확인
+                    // 로컬 스토리지 백업
+                    try {
+                        localStorage.setItem('projects', JSON.stringify(projects));
+                        console.log('💾 로컬 스토리지 백업 완료');
+                    } catch (e) {
+                        console.warn('⚠️ 로컬 스토리지 저장 실패:', e);
+                    }
+                    
+                    console.log(`✅ 데이터 로드 성공: ${projects.length}개 프로젝트`);
+                    
+                    // 첫 로드시 URL 파라미터 확인 및 강제 렌더링
                     if (isFirstLoad) {
                         isFirstLoad = false;
                         checkUrlProjectParam();
@@ -1248,13 +1283,17 @@
                     
                     // 나머지 화면만 자동 갱신
                     render();
+                }, (error) => {
+                    console.error('❌ Firebase 로드 실패:', error);
+                    // 에러 발생 시에도 화면은 표시 시도
+                    render();
                 });
             } catch (error) {
-                console.log('Firebase 로드 실패 - 로컬 모드:', error);
+                console.log('❌ Firebase 로드 실패 - 로컬 모드:', error);
                 try {
                     projects = JSON.parse(localStorage.getItem('projects') || '[]');
                 } catch (parseError) {
-                    console.error('로컬 데이터 파싱 오류:', parseError);
+                    console.error('❌ 로컬 데이터 파싱 오류:', parseError);
                     projects = [];
                 }
                 checkUrlProjectParam();
@@ -1528,11 +1567,19 @@
                 '<div role="alert" style="background:#ff9800; color:white; padding:8px 16px; text-align:center; font-size:14px; margin-bottom:16px; border-radius:8px;">오프라인 모드 - 데이터가 로컬에 저장됩니다</div>' : '';
             
             if (screen === 'home') {
+                // 앱 버전 표시
+                const appVersion = document.querySelector('meta[name="app-version"]')?.content || '2.1.0';
+                
                 app.innerHTML = `
                     ${offlineIndicator}
                     <header class="header">
                         <h1>쇼다운 심판 앱</h1>
                         <p>관람 · 심판 · 관리</p>
+                        <div style="text-align:center; margin-top:8px;">
+                            <span style="font-size:11px; color:rgba(255,255,255,0.7); background:rgba(255,255,255,0.1); padding:4px 12px; border-radius:12px;">
+                                v${appVersion}
+                            </span>
+                        </div>
                     </header>
                     
                     <main>
@@ -2765,38 +2812,35 @@
                             </h3>
                             
                             ${matches.map(match => {
-                                const endTime = new Date(\`\${match.scheduledDate}T\${match.scheduledTime}\`);
+                                const endTime = new Date(match.scheduledDate + 'T' + match.scheduledTime);
                                 endTime.setMinutes(endTime.getMinutes() + match.estimatedDuration);
                                 const endTimeStr = endTime.toTimeString().slice(0, 5);
                                 
-                                return \`
-                                    <div style="background:white; border:1px solid #ddd; border-radius:8px; padding:16px; margin-bottom:12px; position:relative;">
-                                        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-                                            <div>
-                                                <h4 style="margin:0 0 4px 0; color:#1976d2;">
-                                                    \${match.player1Name} vs \${match.player2Name}
-                                                </h4>
-                                                <div style="font-size:14px; color:#666;">
-                                                    🕐 \${match.scheduledTime} - \${endTimeStr} (\${match.estimatedDuration}분)
-                                                </div>
-                                            </div>
-                                            <div style="text-align:right; font-size:12px;">
-                                                <div style="background:\${match.status === 'completed' ? '#4caf50' : match.status === 'in-progress' ? '#ff9800' : '#e0e0e0'}; color:\${match.status === 'pending' ? '#666' : 'white'}; padding:4px 8px; border-radius:12px; margin-bottom:4px;">
-                                                    \${match.status === 'completed' ? '완료' : match.status === 'in-progress' ? '진행중' : '대기'}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:13px;">
-                                            <div>
-                                                <strong>🏟️ 경기장:</strong> \${match.courtName || '미지정'}
-                                            </div>
-                                            <div>
-                                                <strong>👨‍⚖️ 심판:</strong> \${match.mainRefereeName || '미지정'}
-                                            </div>
-                                        </div>
-                                    </div>
-                                \`;
+                                return '<div style="background:white; border:1px solid #ddd; border-radius:8px; padding:16px; margin-bottom:12px; position:relative;">' +
+                                    '<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">' +
+                                        '<div>' +
+                                            '<h4 style="margin:0 0 4px 0; color:#1976d2;">' +
+                                                match.player1Name + ' vs ' + match.player2Name +
+                                            '</h4>' +
+                                            '<div style="font-size:14px; color:#666;">' +
+                                                '🕐 ' + match.scheduledTime + ' - ' + endTimeStr + ' (' + match.estimatedDuration + '분)' +
+                                            '</div>' +
+                                        '</div>' +
+                                        '<div style="text-align:right; font-size:12px;">' +
+                                            '<div style="background:' + (match.status === 'completed' ? '#4caf50' : match.status === 'in-progress' ? '#ff9800' : '#e0e0e0') + '; color:' + (match.status === 'pending' ? '#666' : 'white') + '; padding:4px 8px; border-radius:12px; margin-bottom:4px;">' +
+                                                (match.status === 'completed' ? '완료' : match.status === 'in-progress' ? '진행중' : '대기') +
+                                            '</div>' +
+                                        '</div>' +
+                                    '</div>' +
+                                    '<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:13px;">' +
+                                        '<div>' +
+                                            '<strong>🏟️ 경기장:</strong> ' + (match.courtName || '미지정') +
+                                        '</div>' +
+                                        '<div>' +
+                                            '<strong>👨‍⚖️ 심판:</strong> ' + (match.mainRefereeName || '미지정') +
+                                        '</div>' +
+                                    '</div>' +
+                                '</div>';
                             }).join('')}
                         </div>
                     `;
@@ -3288,97 +3332,6 @@
                     `;
                 }).join('') || '';
                 
-                <!-- 득점 히스토리 -->
-                ${m.history && m.history.length > 0 ? `
-                    <div style="margin-top:24px; border:2px solid #ff9800; border-radius:12px; overflow:hidden;">
-                        <div style="background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%); color:white; padding:12px;">
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <h4 style="margin:0; color:white;">📊 득점 기록</h4>
-                                <div style="display:flex; align-items:center; gap:8px;">
-                                    <span style="font-size:14px; opacity:0.9;">총 ${m.history.length}개</span>
-                                    <button onclick="togglePracticeHistoryOrder()" style="background:rgba(255,255,255,0.2); border:none; color:white; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:600;">
-                                        ${practiceHistoryOrderDesc ? '🔽 최신순' : '🔼 과거순'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div style="padding:12px; background:white;">
-                            <div style="background:#fff3e0; padding:12px; border-radius:8px; margin-bottom:12px;">
-                                <div style="display:flex; justify-content:space-between; font-size:13px;">
-                                    <div>
-                                        <strong>${m.player1Name}</strong>
-                                        <div style="color:#666; margin-top:2px;">
-                                            득점 횟수: ${m.history.filter(h => h.player === 'player1').length}회
-                                        </div>
-                                    </div>
-                                    <div style="text-align:right;">
-                                        <strong>${m.player2Name}</strong>
-                                        <div style="color:#666; margin-top:2px;">
-                                            득점 횟수: ${m.history.filter(h => h.player === 'player2').length}회
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div style="max-height:400px; overflow-y:auto;">
-                                ${(() => {
-                                    // 정렬 적용
-                                    const sortedHistory = practiceHistoryOrderDesc 
-                                        ? [...m.history].reverse()  // 최신순
-                                        : [...m.history];  // 과거순 (원본 순서)
-                                    
-                                    return sortedHistory.map((h, i) => {
-                                        const playerName = h.player === 'player1' ? m.player1Name : m.player2Name;
-                                        const isGoal = h.type && h.type.includes('골');
-                                        const recordNum = practiceHistoryOrderDesc ? m.history.length - i : i + 1;
-                                        
-                                        return `
-                                            <div style="padding:12px; margin:8px 0; background:#f5f5f5; border-radius:8px; border-left:4px solid ${isGoal ? '#4caf50' : '#ff9800'};">
-                                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                                                    <span style="font-size:12px; color:#666;">
-                                                        ${isGoal ? '⚽' : '⚠️'} #${recordNum} ${h.time || '시간 미기록'}
-                                                    </span>
-                                                    <span style="font-weight:700; color:#1976d2; font-size:16px;">
-                                                        +${h.points}점
-                                                    </span>
-                                                </div>
-                                                <div style="font-weight:600; font-size:14px; margin-bottom:4px;">
-                                                    ${playerName}
-                                                </div>
-                                                <div style="font-size:13px; color:#666;">
-                                                    ${h.type || '득점'}
-                                                </div>
-                                                ${h.set ? `
-                                                    <div style="font-size:11px; color:#999; margin-top:4px;">
-                                                        세트 ${h.set}
-                                                    </div>
-                                                ` : ''}
-                                                ${h.scoreBefore && h.scoreAfter ? `
-                                                    <div style="margin-top:8px; padding-top:8px; border-top:1px solid #ddd;">
-                                                        <span style="font-size:12px; color:#666;">
-                                                            ${h.scoreBefore.player1}:${h.scoreBefore.player2}
-                                                        </span>
-                                                        <span style="color:#4caf50; margin:0 4px;">→</span>
-                                                        <span style="font-size:12px; font-weight:700; color:#4caf50;">
-                                                            ${h.scoreAfter.player1}:${h.scoreAfter.player2}
-                                                        </span>
-                                                    </div>
-                                                ` : ''}
-                                            </div>
-                                        `;
-                                    }).join('');
-                                })()}
-                            </div>
-                        </div>
-                    </div>
-                ` : `
-                    <div style="margin-top:20px; text-align:center; padding:30px 20px; background:#f5f5f5; border-radius:12px;">
-                        <div style="font-size:40px; margin-bottom:10px;">📝</div>
-                        <p style="color:#666; margin:0;">득점 기록이 없습니다</p>
-                    </div>
-                `}
-                
                 app.innerHTML = `
                     <div class="card">
                         <button class="btn" onclick="goTo('practice-history')" style="margin-bottom:16px;">← 기록 목록</button>
@@ -3393,7 +3346,6 @@
                         <h4 style="margin:0 0 8px 0;">세트별 점수</h4>
                         ${setScoresHTML}
                         
-                        <!-- 득점 히스토리 -->
                         ${m.history && m.history.length > 0 ? `
                             <div style="margin-top:24px; border:2px solid #ff9800; border-radius:12px; overflow:hidden;">
                                 <div style="background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%); color:white; padding:12px;">
@@ -13554,9 +13506,10 @@
             localStorage.setItem('refereePasswordsInitialized', 'true');
         }
         
-        render();
+        // render()는 DOMContentLoaded에서 호출됨 (978번 줄)
+        // 여기서 호출하면 DOM이 준비되지 않아서 에러 발생!
         
-        // PWA Service Worker 등록 (인라인 버전 - 버전 자동 관리)
+        // PWA Service Worker 등록 (자동 업데이트)
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 // HTML meta 태그에서 버전 읽기
@@ -13573,22 +13526,22 @@
                     ];
 
                     self.addEventListener('install', event => {
-                        console.log('[SW] 설치 중... 버전:', CACHE_NAME);
+                        console.log('[SW] 🔄 새 버전 설치 중...', CACHE_NAME);
+                        self.skipWaiting(); // 즉시 활성화
                         event.waitUntil(
                             caches.open(CACHE_NAME)
                                 .then(cache => cache.addAll(urlsToCache))
-                                .then(() => self.skipWaiting())
                         );
                     });
 
                     self.addEventListener('activate', event => {
-                        console.log('[SW] 활성화 중...');
+                        console.log('[SW] ✨ 새 버전 활성화!');
                         event.waitUntil(
                             caches.keys().then(cacheNames => {
                                 return Promise.all(
                                     cacheNames.map(cacheName => {
                                         if (cacheName !== CACHE_NAME) {
-                                            console.log('[SW] 이전 캐시 삭제:', cacheName);
+                                            console.log('[SW] 🗑️ 이전 캐시 삭제:', cacheName);
                                             return caches.delete(cacheName);
                                         }
                                     })
@@ -13599,6 +13552,7 @@
 
                     self.addEventListener('fetch', event => {
                         event.respondWith(
+                            // Network First 전략 (항상 최신 우선)
                             fetch(event.request)
                                 .then(response => {
                                     if (response && response.status === 200) {
@@ -13610,6 +13564,7 @@
                                     return response;
                                 })
                                 .catch(() => {
+                                    // 네트워크 실패 시 캐시 사용
                                     return caches.match(event.request)
                                         .then(response => {
                                             if (response) return response;
@@ -13631,23 +13586,26 @@
                         console.log('✅ SW 등록 성공:', registration.scope);
                         console.log('📌 현재 버전:', appVersion);
                         
-                        // 업데이트 확인
+                        // 1분마다 업데이트 확인
+                        setInterval(() => {
+                            registration.update();
+                        }, 60 * 1000);
+                        
+                        // 업데이트 감지
                         registration.addEventListener('updatefound', () => {
                             const newWorker = registration.installing;
+                            console.log('🔄 새 버전 발견!');
+                            
                             newWorker.addEventListener('statechange', () => {
                                 if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                    // 새 버전 사용 가능
-                                    if (confirm('🎉 새 버전이 있습니다! 업데이트하시겠습니까?')) {
+                                    // 새 버전 자동 적용 (3초 후)
+                                    console.log('✨ 3초 후 자동 업데이트!');
+                                    setTimeout(() => {
                                         window.location.reload();
-                                    }
+                                    }, 3000);
                                 }
                             });
                         });
-                        
-                        // 주기적 업데이트 확인 (1시간마다)
-                        setInterval(() => {
-                            registration.update();
-                        }, 60 * 60 * 1000);
                     })
                     .catch(err => {
                         console.log('❌ SW 등록 실패:', err);
