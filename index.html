@@ -740,6 +740,9 @@
         let pauseSeconds = 0; // 일시정지 경과 시간
         let isOffline = !navigator.onLine; // 오프라인 상태
         let userRole = null; // 'referee' 또는 'viewer'
+        let favoritePlayers = []; // 즐겨찾기 선수
+        let notifiedMatches = []; // 알림 설정된 경기
+        let showFavoritesOnly = false; // 즐겨찾기만 표시
         
         // 오프라인 감지
         window.addEventListener('online', () => {
@@ -12082,8 +12085,10 @@
         }
         
         const currentTheme = themes[currentThemeIndex];
-        document.getElementById('theme-btn').textContent = `모드: ${currentTheme.name}`;
-        document.getElementById('voice-btn').style.opacity = voiceEnabled ? '1' : '0.5';
+        const themeBtnInit = document.getElementById('theme-btn');
+        const voiceBtnInit = document.getElementById('voice-btn');
+        if (themeBtnInit) themeBtnInit.textContent = `모드: ${currentTheme.name}`;
+        if (voiceBtnInit) voiceBtnInit.style.opacity = voiceEnabled ? '1' : '0.5';
         
         // 심판 비밀번호 초기화 (첫 실행 시)
         if (!localStorage.getItem('refereePasswordsInitialized')) {
@@ -12222,10 +12227,6 @@
         }
         
         // ✨ Firebase 기반 사용자 설정
-        let favoritePlayers = [];
-        let notifiedMatches = [];
-        let showFavoritesOnly = false;
-        
         // Firebase에서 사용자 설정 로드
         function loadUserPreferences() {
             if (!database || !userId) {
