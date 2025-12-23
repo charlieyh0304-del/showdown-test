@@ -247,6 +247,10 @@
             background: var(--bg-card);
             border-bottom: 2px solid var(--border);
             padding: 8px 12px;
+            /* iOS safe area 지원 */
+            padding-top: max(8px, env(safe-area-inset-top));
+            padding-left: max(12px, env(safe-area-inset-left));
+            padding-right: max(12px, env(safe-area-inset-right));
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -331,6 +335,14 @@
             transition: all 0.2s;
             background: var(--bg-secondary);
             color: var(--text-primary);
+            /* 터치 피드백 개선 */
+            -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+            touch-action: manipulation;
+        }
+        
+        .btn:active {
+            transform: scale(0.98);
+            opacity: 0.9;
         }
         
         .btn:disabled {
@@ -573,6 +585,67 @@
             .timer-display { font-size: 72px; }
             .foul-grid { grid-template-columns: 1fr; }
             .info-grid { grid-template-columns: 1fr; }
+            
+            /* 모바일에서 접근성 바 최적화 */
+            .accessibility-bar {
+                padding: 6px 8px;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+            
+            .accessibility-bar > div:first-child {
+                flex: 1 1 auto;
+            }
+            
+            .accessibility-controls {
+                gap: 4px;
+                flex: 0 0 auto;
+            }
+            
+            .a11y-btn {
+                font-size: 11px;
+                padding: 6px 8px;
+                min-width: 38px;
+                min-height: 38px;
+            }
+            
+            /* 모바일에서 컨테이너 패딩 증가 */
+            .container {
+                padding-top: 90px;
+            }
+            
+            /* 헤더 최적화 */
+            .header h1 {
+                font-size: 22px;
+            }
+            
+            /* 버튼 터치 영역 확보 */
+            .btn {
+                min-height: 48px;
+                font-size: 15px;
+            }
+            
+            /* 카드 패딩 조정 */
+            .card {
+                padding: 16px;
+            }
+        }
+        
+        @media (max-width: 400px) {
+            /* 매우 작은 화면 */
+            .container {
+                padding-top: 100px;
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+            
+            .accessibility-bar {
+                font-size: 11px;
+            }
+            
+            .header h1 {
+                font-size: 20px;
+            }
         }
     </style>
 </head>
@@ -611,7 +684,20 @@
         </div>
     </div>
 
-    <div id="app" class="container"></div>
+    <div id="app" class="container">
+        <!-- 초기 로딩 화면 -->
+        <div style="text-align:center; padding:60px 20px;">
+            <div style="font-size:48px; margin-bottom:16px; animation:pulse 1.5s infinite;">⏳</div>
+            <h2 style="color:var(--text-primary); margin-bottom:8px;">쇼다운 심판 앱 PRO</h2>
+            <p style="color:var(--text-secondary); font-size:14px;">로딩 중...</p>
+        </div>
+        <style>
+            @keyframes pulse {
+                0%, 100% { opacity: 1; transform: scale(1); }
+                50% { opacity: 0.6; transform: scale(1.1); }
+            }
+        </style>
+    </div>
 
     <!-- aria-live 실시간 안내 (화면에 보이지 않음, 스크린 리더만) -->
     <div aria-live="assertive" aria-atomic="true" class="sr-only" id="live-announcement"></div>
@@ -1460,34 +1546,55 @@
                     
                     <main>
                         <section>
-                            <h2>모드 선택</h2>
-                            <p>사용 목적에 맞는 모드를 선택하세요</p>
+                            <h2 style="margin-bottom:16px;">모드 선택</h2>
+                            <p style="margin-bottom:24px; color:var(--text-secondary);">사용 목적에 맞는 모드를 선택하세요</p>
                             
                             <nav class="mode-navigation">
-                                <ul style="list-style:none; padding:0;">
-                                    <li style="margin-bottom:24px;">
-                                        <button type="button" class="btn btn-primary" onclick="selectRole('viewer')" style="background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); width:100%; margin-bottom:8px;">
-                                            관람 모드
+                                <ul style="list-style:none; padding:0; margin:0;">
+                                    <li style="margin-bottom:28px;">
+                                        <button type="button" class="btn btn-primary" onclick="selectRole('viewer')" 
+                                                style="background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                                       width:100%; 
+                                                       margin-bottom:12px;
+                                                       min-height:56px;
+                                                       font-size:18px;
+                                                       font-weight:700;
+                                                       box-shadow:0 4px 12px rgba(102,126,234,0.3);">
+                                            👁️ 관람 모드
                                         </button>
-                                        <p style="font-size:14px; color:var(--text-secondary); margin:0;">
+                                        <p style="font-size:14px; color:var(--text-secondary); margin:0; padding:0 8px;">
                                             실시간 점수 확인, 경기 일정, 대회 결과
                                         </p>
                                     </li>
                                     
-                                    <li style="margin-bottom:24px;">
-                                        <button type="button" class="btn btn-primary" onclick="goTo('referee-home')" style="background:var(--success); width:100%; margin-bottom:8px;">
-                                            심판 모드
+                                    <li style="margin-bottom:28px;">
+                                        <button type="button" class="btn btn-primary" onclick="goTo('referee-home')" 
+                                                style="background:linear-gradient(135deg, #4caf50 0%, #2e7d32 100%); 
+                                                       width:100%; 
+                                                       margin-bottom:12px;
+                                                       min-height:56px;
+                                                       font-size:18px;
+                                                       font-weight:700;
+                                                       box-shadow:0 4px 12px rgba(76,175,80,0.3);">
+                                            🎯 심판 모드
                                         </button>
-                                        <p style="font-size:14px; color:var(--text-secondary); margin:0;">
+                                        <p style="font-size:14px; color:var(--text-secondary); margin:0; padding:0 8px;">
                                             경기 진행, 득점 입력, 연습 경기
                                         </p>
                                     </li>
                                     
                                     <li>
-                                        <button type="button" class="btn btn-primary" onclick="enterAdminMode()" style="background:linear-gradient(135deg, #1976d2 0%, #0d47a1 100%); width:100%; margin-bottom:8px;">
-                                            관리자 모드
+                                        <button type="button" class="btn btn-primary" onclick="enterAdminMode()" 
+                                                style="background:linear-gradient(135deg, #1976d2 0%, #0d47a1 100%); 
+                                                       width:100%; 
+                                                       margin-bottom:12px;
+                                                       min-height:56px;
+                                                       font-size:18px;
+                                                       font-weight:700;
+                                                       box-shadow:0 4px 12px rgba(25,118,210,0.3);">
+                                            ⚙️ 관리자 모드
                                         </button>
-                                        <p style="font-size:14px; color:var(--text-secondary); margin:0;">
+                                        <p style="font-size:14px; color:var(--text-secondary); margin:0; padding:0 8px;">
                                             대진 설정, 심판 관리, 경기장 관리
                                         </p>
                                     </li>
