@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" dir="ltr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -36,6 +36,24 @@
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        /* 텍스트 입력 방향 고정 - 글자 뒤집힘 방지 */
+        input[type="text"],
+        input[type="number"],
+        input[type="password"],
+        input[type="search"],
+        input[type="email"],
+        input[type="tel"],
+        textarea {
+            direction: ltr !important;
+            text-align: left !important;
+            unicode-bidi: plaintext !important;
+        }
+        
+        /* 전체 문서 방향 */
+        html, body, #app {
+            direction: ltr !important;
+        }
         
         /* 테마 변수 */
         :root {
@@ -464,11 +482,35 @@
         }
     </style>
 </head>
-<body>
+<body dir="ltr">
     <div class="accessibility-bar">
-        <div style="font-weight: 600; font-size: 14px;">접근성</div>
+        <div style="font-weight: 600; font-size: 14px;">⚫ 쇼다운</div>
         <div class="accessibility-controls">
-            <button class="a11y-btn" onclick="cycleTheme()" id="theme-btn" aria-label="화면 모드 변경">모드: 일반</button>
+            <div style="position:relative;">
+                <button class="a11y-btn" onclick="toggleAccessibilityMenu()" id="a11y-menu-btn" aria-label="접근성 설정 열기" aria-expanded="false" aria-haspopup="true">
+                    ♿ 접근성 ▼
+                </button>
+                <div id="a11y-dropdown" style="display:none; position:absolute; right:0; top:100%; margin-top:4px; background:var(--bg-card); border:2px solid var(--border); border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15); min-width:180px; z-index:1001;">
+                    <div style="padding:8px 0;">
+                        <button onclick="setTheme('default')" class="a11y-dropdown-item" style="width:100%; padding:12px 16px; border:none; background:none; text-align:left; cursor:pointer; font-size:14px; display:flex; align-items:center; gap:8px;">
+                            <span>☀️</span> 일반 모드
+                        </button>
+                        <button onclick="setTheme('dark')" class="a11y-dropdown-item" style="width:100%; padding:12px 16px; border:none; background:none; text-align:left; cursor:pointer; font-size:14px; display:flex; align-items:center; gap:8px;">
+                            <span>🌙</span> 다크 모드
+                        </button>
+                        <button onclick="setTheme('high-contrast')" class="a11y-dropdown-item" style="width:100%; padding:12px 16px; border:none; background:none; text-align:left; cursor:pointer; font-size:14px; display:flex; align-items:center; gap:8px;">
+                            <span>◐</span> 고대비
+                        </button>
+                        <button onclick="setTheme('inverted')" class="a11y-dropdown-item" style="width:100%; padding:12px 16px; border:none; background:none; text-align:left; cursor:pointer; font-size:14px; display:flex; align-items:center; gap:8px;">
+                            <span>🔄</span> 색반전
+                        </button>
+                        <div style="border-top:1px solid var(--border); margin:8px 0;"></div>
+                        <button onclick="toggleLargeText()" class="a11y-dropdown-item" style="width:100%; padding:12px 16px; border:none; background:none; text-align:left; cursor:pointer; font-size:14px; display:flex; align-items:center; gap:8px;">
+                            <span>🔤</span> 큰 글씨 <span id="large-text-status" style="margin-left:auto; font-size:12px; color:#666;">OFF</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -517,24 +559,35 @@
         };
         
         let database = null;
+        let auth = null; // Firebase Auth
         let userId = null; // ✨ 사용자 고유 ID
+        
+        // Firebase 초기화
         try {
-            firebase.initializeApp(firebaseConfig);
-            database = firebase.database();
-            console.log('✅ Firebase 연결됨');
-            
-            // ✨ 사용자 ID 초기화
-            initializeUserId();
+            if (typeof firebase !== 'undefined') {
+                firebase.initializeApp(firebaseConfig);
+                database = firebase.database();
+                auth = firebase.auth();
+                console.log('✅ Firebase 연결됨');
+                
+                // ✨ 사용자 ID 초기화
+                initializeUserId();
+            } else {
+                console.log('Firebase SDK 로드 안됨 - 로컬 모드');
+            }
         } catch (error) {
-            console.log('Firebase 연결 실패 - 로컬 모드');
+            console.log('Firebase 연결 실패 - 로컬 모드:', error);
         }
         
-        // 심판 비밀번호 초기화 (첫 실행 시)
-        if (!localStorage.getItem('refereePasswordsInitialized')) {
-            localStorage.setItem('refereePasswords', JSON.stringify({}));
-            localStorage.setItem('refereePasswordsInitialized', 'true');
-            console.log('✅ 심판 비밀번호 시스템 초기화됨');
-        }
+        // 페이지 로드 시 바로 화면 표시
+        document.addEventListener('DOMContentLoaded', function() {
+            // 즉시 홈 화면 렌더링
+            setTimeout(() => {
+                if (typeof render === 'function') {
+                    render();
+                }
+            }, 100);
+        });
         
         // ✨ 사용자 ID 초기화 함수
         function initializeUserId() {
@@ -588,8 +641,80 @@
             localStorage.setItem('theme', theme.id);
             localStorage.setItem('themeIndex', currentThemeIndex);
             
-            document.getElementById('theme-btn').textContent = `모드: ${theme.name}`;
+            const themeBtn = document.getElementById('theme-btn');
+            if (themeBtn) themeBtn.textContent = `모드: ${theme.name}`;
             speak(`${theme.name} 모드로 변경됨`);
+        }
+        
+        // 접근성 드롭다운 토글
+        function toggleAccessibilityMenu() {
+            const dropdown = document.getElementById('a11y-dropdown');
+            const btn = document.getElementById('a11y-menu-btn');
+            const isOpen = dropdown.style.display !== 'none';
+            
+            dropdown.style.display = isOpen ? 'none' : 'block';
+            btn.setAttribute('aria-expanded', !isOpen);
+            
+            // 외부 클릭 시 닫기
+            if (!isOpen) {
+                setTimeout(() => {
+                    document.addEventListener('click', closeA11yMenuOnClickOutside);
+                }, 10);
+            }
+        }
+        
+        function closeA11yMenuOnClickOutside(e) {
+            const dropdown = document.getElementById('a11y-dropdown');
+            const btn = document.getElementById('a11y-menu-btn');
+            if (!dropdown.contains(e.target) && e.target !== btn) {
+                dropdown.style.display = 'none';
+                btn.setAttribute('aria-expanded', 'false');
+                document.removeEventListener('click', closeA11yMenuOnClickOutside);
+            }
+        }
+        
+        // 테마 직접 설정
+        function setTheme(themeId) {
+            const themeMap = {
+                'default': { id: 'normal', name: '일반', class: '' },
+                'dark': { id: 'dark', name: '다크', class: 'dark' },
+                'high-contrast': { id: 'high-contrast', name: '고대비', class: 'high-contrast' },
+                'inverted': { id: 'inverted', name: '색반전', class: 'inverted' }
+            };
+            
+            const theme = themeMap[themeId] || themeMap['default'];
+            document.body.className = theme.class;
+            localStorage.setItem('theme', theme.id);
+            
+            // 드롭다운 닫기
+            document.getElementById('a11y-dropdown').style.display = 'none';
+            document.getElementById('a11y-menu-btn').setAttribute('aria-expanded', 'false');
+            
+            announce(`${theme.name} 모드로 변경됨`);
+        }
+        
+        // 큰 글씨 토글
+        let largeTextEnabled = localStorage.getItem('largeText') === 'true';
+        
+        function toggleLargeText() {
+            largeTextEnabled = !largeTextEnabled;
+            localStorage.setItem('largeText', largeTextEnabled);
+            
+            if (largeTextEnabled) {
+                document.body.style.fontSize = '18px';
+            } else {
+                document.body.style.fontSize = '';
+            }
+            
+            const statusEl = document.getElementById('large-text-status');
+            if (statusEl) statusEl.textContent = largeTextEnabled ? 'ON' : 'OFF';
+            
+            announce(largeTextEnabled ? '큰 글씨 켜짐' : '큰 글씨 꺼짐');
+        }
+        
+        // 초기 큰 글씨 적용
+        if (largeTextEnabled) {
+            document.body.style.fontSize = '18px';
         }
 
         function toggleVoice() {
@@ -810,31 +935,31 @@
                     ${offlineIndicator}
                     <div class="header">
                         <h1>⚫ 쇼다운 심판 앱 PRO</h1>
-                        <p>대진 설정 · 심판 · 관람</p>
+                        <p>관람 · 심판 · 관리</p>
                     </div>
                     <div class="card">
                         <h2>모드 선택</h2>
                         <p style="color:var(--text-secondary); margin-bottom:16px;">사용 목적에 맞는 모드를 선택하세요</p>
                         
-                        <button type="button" role="button" class="btn btn-primary" onclick="enterBracketMode()" style="background:linear-gradient(135deg, #1976d2 0%, #0d47a1 100%); margin-bottom:8px;" aria-label="대진 설정 모드 - 대회 생성, 조편성, 토너먼트">
-                            🏆 대진 설정
-                        </button>
-                        <p style="font-size:14px; color:var(--text-secondary); margin-bottom:20px;">
-                            대회 생성, 조편성, 토너먼트 (운영자용)
-                        </p>
-                        
-                        <button type="button" role="button" class="btn btn-primary" onclick="selectRole('referee')" style="background:var(--success); margin-bottom:8px;" aria-label="심판 모드 선택 - 경기 진행, 득점 입력">
-                            🔐 심판 모드
-                        </button>
-                        <p style="font-size:14px; color:var(--text-secondary); margin-bottom:20px;">
-                            경기 진행, 득점 입력
-                        </p>
-                        
-                        <button type="button" role="button" class="btn btn-primary" onclick="selectRole('viewer')" style="background:var(--primary);" aria-label="관람 모드 선택 - 실시간 점수 확인, 경기 기록 보기">
+                        <button type="button" role="button" class="btn btn-primary" onclick="selectRole('viewer')" style="background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin-bottom:8px;" aria-label="관람 모드 선택">
                             👁️ 관람 모드
                         </button>
+                        <p style="font-size:14px; color:var(--text-secondary); margin-bottom:20px;">
+                            실시간 점수 확인, 경기 일정, 대회 결과
+                        </p>
+                        
+                        <button type="button" role="button" class="btn btn-primary" onclick="goTo('referee-home')" style="background:var(--success); margin-bottom:8px;" aria-label="심판 모드 선택">
+                            ⚖️ 심판 모드
+                        </button>
+                        <p style="font-size:14px; color:var(--text-secondary); margin-bottom:20px;">
+                            경기 진행, 득점 입력, 연습 경기
+                        </p>
+                        
+                        <button type="button" role="button" class="btn btn-primary" onclick="enterAdminMode()" style="background:linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);" aria-label="관리자 모드 선택">
+                            🔐 관리자 모드
+                        </button>
                         <p style="font-size:14px; color:var(--text-secondary); margin-top:8px;">
-                            실시간 점수 확인, 경기 기록 보기
+                            대진 설정, 심판 관리, 경기장 관리
                         </p>
                     </div>
                 `;
@@ -845,30 +970,25 @@
                 const recentCount = practiceHistory.length;
                 
                 app.innerHTML = `
-                    <div class="header">
-                        <h1>🔐 심판 모드</h1>
-                        <p>경기 진행 · 득점 입력</p>
+                    <div class="header" style="background:linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);">
+                        <h1 style="color:white;">⚖️ 심판 모드</h1>
+                        <p style="color:rgba(255,255,255,0.9);">경기 진행 · 득점 입력</p>
                     </div>
                     
                     <div class="card">
-                        <h2>📂 대회 경기</h2>
-                        <p style="font-size:13px; color:var(--text-secondary); margin-bottom:12px;">대진 설정에서 생성된 대회의 경기를 진행합니다.</p>
-                        <button type="button" role="button" class="btn btn-primary" onclick="goTo('project-list')" aria-label="프로젝트 목록 보기">
+                        <div style="background:#e8f5e9; border-left:4px solid #4caf50; padding:12px; border-radius:8px; margin-bottom:16px;">
+                            <strong>📂 대회 경기</strong><br>
+                            <span style="font-size:14px;">대진 설정에서 생성된 대회의 경기를 진행합니다.</span>
+                        </div>
+                        <button type="button" role="button" class="btn btn-primary" onclick="goTo('referee-project-list')" style="width:100%; background:#4caf50;" aria-label="대회 경기 목록">
                             📂 대회/경기 목록
                         </button>
-                    </div>
-                    
-                    <div class="card" style="background:linear-gradient(135deg, #4caf50 0%, #2e7d32 100%); color:white;">
-                        <h2 style="color:white;">➕ 빠른 프로젝트</h2>
-                        <p style="font-size:13px; margin-bottom:12px; opacity:0.9;">소규모 대회나 연습용 프로젝트를 빠르게 생성합니다.</p>
-                        <button type="button" class="btn" onclick="goTo('quick-project')" style="background:white; color:#2e7d32; width:100%;" aria-label="빠른 프로젝트 생성">
-                            ➕ 새 프로젝트 생성
-                        </button>
+                        <p style="font-size:12px; color:#666; margin-top:8px; text-align:center;">경기별 PIN으로 인증 후 진행</p>
                     </div>
                     
                     <div class="card" style="background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%); color:white;">
                         <h2 style="color:white;">🎯 연습 경기</h2>
-                        <p style="font-size:13px; margin-bottom:12px; opacity:0.9;">프로젝트 없이 바로 경기를 진행합니다.</p>
+                        <p style="font-size:13px; margin-bottom:12px; opacity:0.9;">프로젝트 없이 바로 경기를 진행합니다. 실시간 공유 가능!</p>
                         <button type="button" class="btn" onclick="goTo('practice-mode')" style="background:white; color:#ff5722; width:100%;" aria-label="연습 경기 시작">
                             🎯 연습 경기 시작
                         </button>
@@ -877,17 +997,481 @@
                     <div class="card">
                         <h2>📋 경기 기록</h2>
                         <p style="font-size:13px; color:var(--text-secondary); margin-bottom:12px;">저장된 연습 경기 기록 ${recentCount}건</p>
-                        <button type="button" class="btn" onclick="goTo('practice-history')" aria-label="경기 기록 보기">
+                        <button type="button" class="btn" onclick="goTo('practice-history')" style="width:100%;" aria-label="경기 기록 보기">
                             📋 기록 보기
                         </button>
                     </div>
                     
                     <div class="card">
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
-                            <button type="button" class="btn" onclick="changeRefereePassword()" style="background:#2196f3; color:white;" aria-label="비밀번호 변경">🔐 비밀번호</button>
-                            <button type="button" class="btn" onclick="logout()" style="background:#666; color:white;" aria-label="로그아웃">🚪 로그아웃</button>
-                        </div>
                         <button type="button" role="button" class="btn" onclick="goTo('home')" aria-label="모드 선택 화면으로 돌아가기">← 모드 선택으로</button>
+                    </div>
+                `;
+            }
+            // 심판용 프로젝트 목록 (PIN 인증 방식)
+            else if (screen === 'referee-project-list') {
+                const projectList = projects.filter(p => p.matches && p.matches.length > 0).map((p, i) => {
+                    const actualIndex = projects.indexOf(p);
+                    const activeMatches = p.matches.filter(m => m.status !== 'completed').length;
+                    const completedMatches = p.matches.filter(m => m.status === 'completed').length;
+                    return `
+                        <div style="padding:16px; margin:8px 0; background:var(--bg-secondary); border-radius:8px; cursor:pointer; border-left:4px solid #4caf50;" onclick="openRefereeProject(${actualIndex})">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <strong>${p.name}</strong>
+                                ${activeMatches > 0 ? `<span style="background:#ff9800; color:white; padding:2px 8px; border-radius:12px; font-size:12px;">${activeMatches}경기 대기</span>` : ''}
+                            </div>
+                            <div style="font-size:13px; color:var(--text-secondary); margin-top:4px;">
+                                ${p.date || '날짜 미정'} · ${completedMatches}/${p.matches.length} 완료
+                            </div>
+                        </div>
+                    `;
+                }).join('') || '<p style="text-align:center; color:var(--text-secondary); padding:20px;">진행 가능한 대회가 없습니다.</p>';
+                
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);">
+                        <h1 style="color:white;">📂 대회/경기 목록</h1>
+                        <p style="color:rgba(255,255,255,0.9);">경기를 선택하고 PIN으로 인증하세요</p>
+                    </div>
+                    <div class="card">
+                        ${projectList}
+                    </div>
+                    <div class="card">
+                        <button class="btn" onclick="goTo('referee-home')" style="width:100%;">← 심판 홈으로</button>
+                    </div>
+                `;
+            }
+            // 관리자 모드 홈
+            else if (screen === 'admin-home') {
+                const currentOperator = JSON.parse(sessionStorage.getItem('currentOperator') || 'null');
+                
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <h1 style="color:white; margin:0;">🔐 관리자 모드</h1>
+                                <p style="color:rgba(255,255,255,0.9); margin:4px 0 0 0;">대진 설정 · 심판 관리 · 경기장 관리</p>
+                            </div>
+                            <button class="btn" onclick="adminLogout()" style="background:rgba(255,255,255,0.2); color:white; padding:8px 12px;">
+                                🚪 로그아웃
+                            </button>
+                        </div>
+                    </div>
+                    
+                    ${currentOperator ? `
+                        <div class="card" style="background:linear-gradient(135deg, ${currentOperator.role === 'super' ? '#e91e63' : '#2196f3'} 0%, ${currentOperator.role === 'super' ? '#c2185b' : '#1976d2'} 100%); color:white;">
+                            <div style="display:flex; align-items:center; gap:12px;">
+                                <span style="font-size:32px;">${currentOperator.role === 'super' ? '👑' : '🔧'}</span>
+                                <div>
+                                    <strong style="font-size:18px;">${currentOperator.name}</strong>
+                                    <div style="font-size:13px; opacity:0.9;">${currentOperator.role === 'super' ? '최고 관리자' : '일반 관리자'}</div>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    <div class="card">
+                        <div style="background:#e3f2fd; border-left:4px solid #1976d2; padding:12px; border-radius:8px; margin-bottom:16px;">
+                            <strong>🏆 대진 설정</strong><br>
+                            <span style="font-size:14px;">대회 생성, 조편성, 토너먼트 구성</span>
+                        </div>
+                        <button type="button" class="btn btn-primary" onclick="goTo('bracket-home')" style="width:100%;" aria-label="대진 설정">
+                            🏆 대진 설정
+                        </button>
+                    </div>
+                    
+                    <div class="card">
+                        <div style="background:#e8f5e9; border-left:4px solid #4caf50; padding:12px; border-radius:8px; margin-bottom:16px;">
+                            <strong>👥 심판 관리 (전역)</strong><br>
+                            <span style="font-size:14px;">심판 등록, PIN 발급 - 모든 대회에서 사용</span>
+                        </div>
+                        <button type="button" class="btn" onclick="goTo('referee-manage')" style="width:100%; background:#4caf50; color:white;" aria-label="심판 관리">
+                            👥 심판 관리
+                        </button>
+                    </div>
+                    
+                    <div class="card">
+                        <div style="background:#fff3e0; border-left:4px solid #ff9800; padding:12px; border-radius:8px; margin-bottom:16px;">
+                            <strong>🏟️ 경기장 관리 (전역)</strong><br>
+                            <span style="font-size:14px;">경기장 등록 - 모든 대회에서 사용 가능</span>
+                        </div>
+                        <button type="button" class="btn" onclick="goTo('court-manage')" style="width:100%; background:#ff9800; color:white;" aria-label="경기장 관리">
+                            🏟️ 경기장 관리
+                        </button>
+                    </div>
+                    
+                    <div class="card" style="background:#f5f5f5;">
+                        <p style="font-size:13px; color:#666; text-align:center; margin:0;">
+                            💡 대회별 심판/경기장 배정은<br>
+                            <strong>대진 설정 → 대회 선택 → 대회 관리</strong>에서 합니다
+                        </p>
+                    </div>
+                    
+                    <div class="card">
+                        <div style="background:#fce4ec; border-left:4px solid #e91e63; padding:12px; border-radius:8px; margin-bottom:16px;">
+                            <strong>⚙️ 설정</strong><br>
+                            <span style="font-size:14px;">관리자 비밀번호 변경, 데이터 관리</span>
+                        </div>
+                        <button type="button" class="btn" onclick="goTo('admin-settings')" style="width:100%; background:#e91e63; color:white;" aria-label="설정">
+                            ⚙️ 설정
+                        </button>
+                    </div>
+                    
+                    <div class="card">
+                        <button type="button" class="btn" onclick="goTo('home')" aria-label="모드 선택으로">← 모드 선택으로</button>
+                    </div>
+                `;
+            }
+            // 심판 관리 화면
+            else if (screen === 'referee-manage') {
+                // 모든 프로젝트의 심판 목록 수집
+                const allReferees = [];
+                projects.forEach(p => {
+                    if (p.referees) {
+                        p.referees.forEach(r => {
+                            if (!allReferees.find(ar => ar.name === r.name)) {
+                                allReferees.push({ ...r, projects: [p.name] });
+                            } else {
+                                const existing = allReferees.find(ar => ar.name === r.name);
+                                if (!existing.projects.includes(p.name)) {
+                                    existing.projects.push(p.name);
+                                }
+                            }
+                        });
+                    }
+                });
+                
+                // 전역 심판 목록 (localStorage)
+                const globalReferees = JSON.parse(localStorage.getItem('globalReferees') || '[]');
+                
+                const refereeListHTML = globalReferees.length > 0 ? globalReferees.map((ref, idx) => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:8px; border-left:4px solid #4caf50;">
+                        <div>
+                            <strong>${ref.name}</strong>
+                            <div style="font-size:12px; color:#666; margin-top:2px;">
+                                ${ref.role || '심판'} · PIN: <code style="background:#e0e0e0; padding:2px 6px; border-radius:4px;">${ref.pin}</code>
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:4px;">
+                            <button class="btn" onclick="regenerateRefereePin(${idx})" style="padding:6px 10px; font-size:12px; background:#ff9800; color:white;">🔄 PIN</button>
+                            <button class="btn" onclick="deleteGlobalReferee(${idx})" style="padding:6px 10px; font-size:12px; background:#f44336; color:white;">🗑️</button>
+                        </div>
+                    </div>
+                `).join('') : '<p style="text-align:center; color:#666; padding:20px;">등록된 심판이 없습니다.</p>';
+                
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);">
+                        <h1 style="color:white;">👥 심판 관리</h1>
+                        <p style="color:rgba(255,255,255,0.9);">심판 등록 · PIN 발급 · 경기 배정</p>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>➕ 심판 등록</h3>
+                        <div style="display:grid; grid-template-columns:1fr auto; gap:8px; margin-bottom:12px;">
+                            <input type="text" id="new-referee-name" dir="ltr" lang="ko" placeholder="심판 이름" style="padding:12px; border:1px solid var(--border); border-radius:8px;" autocomplete="off" spellcheck="false">
+                            <select id="new-referee-role" style="padding:12px; border:1px solid var(--border); border-radius:8px;">
+                                <option value="주심">주심</option>
+                                <option value="부심">부심</option>
+                                <option value="기록원">기록원</option>
+                                <option value="심판">심판</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" onclick="addGlobalReferee()" style="width:100%;">➕ 심판 등록</button>
+                    </div>
+                    
+                    <div class="card">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                            <h3 style="margin:0;">📋 등록된 심판 (${globalReferees.length}명)</h3>
+                            <button class="btn" onclick="showAllPins()" style="padding:6px 12px; font-size:12px;">📋 전체 PIN 보기</button>
+                        </div>
+                        <div style="max-height:300px; overflow-y:auto;">
+                            ${refereeListHTML}
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>📊 경기 배정 현황</h3>
+                        <p style="font-size:13px; color:#666; margin-bottom:12px;">각 심판의 배정된 경기 수를 확인합니다.</p>
+                        <button class="btn" onclick="goTo('referee-assignments')" style="width:100%;">📊 배정 현황 보기</button>
+                    </div>
+                    
+                    <div class="card">
+                        <button class="btn" onclick="goTo('admin-home')" style="width:100%;">← 관리자 홈으로</button>
+                    </div>
+                `;
+            }
+            // 대회별 경기장 등록 화면
+            else if (screen === 'tournament-court-manage') {
+                if (!currentProject) {
+                    goTo('bracket-home');
+                    return;
+                }
+                
+                const courts = currentProject.courts || [];
+                const globalCourts = JSON.parse(localStorage.getItem('globalCourts') || '[]');
+                
+                const courtListHTML = courts.length > 0 ? courts.map((court, idx) => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:8px; border-left:4px solid #ff9800;">
+                        <div>
+                            <strong>${court.name}</strong>
+                        </div>
+                        <button class="btn" onclick="deleteTournamentCourt(${idx})" style="padding:6px 10px; font-size:12px; background:#f44336; color:white;">🗑️</button>
+                    </div>
+                `).join('') : '<p style="text-align:center; color:#666; padding:20px;">등록된 경기장이 없습니다.</p>';
+                
+                // 전역 경기장에서 가져오기 옵션
+                const globalCourtOptions = globalCourts.filter(gc => !courts.find(c => c.name === gc.name));
+                
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%);">
+                        <h1 style="color:white;">🏟️ ${currentProject.name}</h1>
+                        <p style="color:rgba(255,255,255,0.9);">경기장 등록</p>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>➕ 경기장 추가</h3>
+                        <div style="margin-bottom:12px;">
+                            <input type="text" id="tournament-court-name" dir="ltr" lang="ko" placeholder="경기장 이름 (예: 1번 코트)" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px;" autocomplete="off" spellcheck="false">
+                        </div>
+                        <button class="btn btn-primary" onclick="addTournamentCourt()" style="width:100%;">➕ 경기장 추가</button>
+                        
+                        ${globalCourtOptions.length > 0 ? `
+                            <div style="margin-top:16px; padding-top:16px; border-top:1px solid #eee;">
+                                <p style="font-size:13px; color:#666; margin-bottom:8px;">또는 전역 경기장에서 가져오기:</p>
+                                <select id="import-global-court" style="width:100%; padding:10px; margin-bottom:8px;">
+                                    <option value="">-- 선택 --</option>
+                                    ${globalCourtOptions.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}
+                                </select>
+                                <button class="btn" onclick="importGlobalCourt()" style="width:100%;">📥 가져오기</button>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="card">
+                        <h3>📋 등록된 경기장 (${courts.length}개)</h3>
+                        <div style="max-height:300px; overflow-y:auto;">
+                            ${courtListHTML}
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <button class="btn" onclick="goTo('bracket-detail')" style="width:100%;">← 대회 상세로</button>
+                    </div>
+                `;
+            }
+            // 대회별 심판 등록 화면
+            else if (screen === 'tournament-referee-manage') {
+                if (!currentProject) {
+                    goTo('bracket-home');
+                    return;
+                }
+                
+                const referees = currentProject.referees || [];
+                const globalReferees = JSON.parse(localStorage.getItem('globalReferees') || '[]');
+                
+                const refereeListHTML = referees.length > 0 ? referees.map((ref, idx) => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:8px; border-left:4px solid #4caf50;">
+                        <div>
+                            <strong>${ref.name}</strong>
+                            <div style="font-size:12px; color:#666; margin-top:2px;">
+                                ${ref.role || '심판'} · PIN: <code style="background:#e0e0e0; padding:2px 6px; border-radius:4px;">${ref.pin || 'N/A'}</code>
+                            </div>
+                        </div>
+                        <button class="btn" onclick="deleteTournamentReferee(${idx})" style="padding:6px 10px; font-size:12px; background:#f44336; color:white;">🗑️</button>
+                    </div>
+                `).join('') : '<p style="text-align:center; color:#666; padding:20px;">등록된 심판이 없습니다.</p>';
+                
+                // 전역 심판에서 가져오기 옵션
+                const globalRefOptions = globalReferees.filter(gr => !referees.find(r => r.name === gr.name));
+                
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);">
+                        <h1 style="color:white;">👥 ${currentProject.name}</h1>
+                        <p style="color:rgba(255,255,255,0.9);">심판 등록</p>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>➕ 심판 추가</h3>
+                        <div style="display:grid; grid-template-columns:1fr auto; gap:8px; margin-bottom:12px;">
+                            <input type="text" id="tournament-referee-name" dir="ltr" lang="ko" placeholder="심판 이름" style="padding:12px; border:1px solid var(--border); border-radius:8px;" autocomplete="off" spellcheck="false">
+                            <select id="tournament-referee-role" style="padding:12px; border:1px solid var(--border); border-radius:8px;">
+                                <option value="주심">주심</option>
+                                <option value="부심">부심</option>
+                                <option value="기록원">기록원</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" onclick="addTournamentReferee()" style="width:100%;">➕ 심판 추가</button>
+                        
+                        ${globalRefOptions.length > 0 ? `
+                            <div style="margin-top:16px; padding-top:16px; border-top:1px solid #eee;">
+                                <p style="font-size:13px; color:#666; margin-bottom:8px;">또는 전역 심판에서 가져오기:</p>
+                                <select id="import-global-referee" style="width:100%; padding:10px; margin-bottom:8px;">
+                                    <option value="">-- 선택 --</option>
+                                    ${globalRefOptions.map(r => `<option value="${r.name}">${r.name} (${r.role}) - PIN: ${r.pin}</option>`).join('')}
+                                </select>
+                                <button class="btn" onclick="importGlobalReferee()" style="width:100%;">📥 가져오기</button>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="card">
+                        <h3>📋 등록된 심판 (${referees.length}명)</h3>
+                        <div style="max-height:300px; overflow-y:auto;">
+                            ${refereeListHTML}
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <button class="btn" onclick="goTo('bracket-detail')" style="width:100%;">← 대회 상세로</button>
+                    </div>
+                `;
+            }
+            // 경기장 관리 화면
+            else if (screen === 'court-manage') {
+                const globalCourts = JSON.parse(localStorage.getItem('globalCourts') || '[]');
+                
+                const courtListHTML = globalCourts.length > 0 ? globalCourts.map((court, idx) => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:8px; border-left:4px solid #ff9800;">
+                        <div>
+                            <strong>${court.name}</strong>
+                            <div style="font-size:12px; color:#666; margin-top:2px;">${court.location || '위치 미지정'}</div>
+                        </div>
+                        <button class="btn" onclick="deleteGlobalCourt(${idx})" style="padding:6px 10px; font-size:12px; background:#f44336; color:white;">🗑️</button>
+                    </div>
+                `).join('') : '<p style="text-align:center; color:#666; padding:20px;">등록된 경기장이 없습니다.</p>';
+                
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%);">
+                        <h1 style="color:white;">🏟️ 경기장 관리</h1>
+                        <p style="color:rgba(255,255,255,0.9);">경기장 등록 · 배정 관리</p>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>➕ 경기장 등록</h3>
+                        <div style="margin-bottom:12px;">
+                            <input type="text" id="new-court-name" dir="ltr" lang="ko" placeholder="경기장 이름 (예: 1번 코트)" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px;" autocomplete="off" spellcheck="false">
+                            <input type="text" id="new-court-location" dir="ltr" lang="ko" placeholder="위치 (선택)" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px;" autocomplete="off" spellcheck="false">
+                        </div>
+                        <button class="btn btn-primary" onclick="addGlobalCourt()" style="width:100%;">➕ 경기장 등록</button>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>📋 등록된 경기장 (${globalCourts.length}개)</h3>
+                        <div style="max-height:300px; overflow-y:auto;">
+                            ${courtListHTML}
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <button class="btn" onclick="goTo('admin-home')" style="width:100%;">← 관리자 홈으로</button>
+                    </div>
+                `;
+            }
+            // 관리자 설정 화면
+            else if (screen === 'admin-settings') {
+                // 운영자 목록
+                const operators = JSON.parse(localStorage.getItem('operators') || '[]');
+                const currentOperator = JSON.parse(sessionStorage.getItem('currentOperator') || 'null');
+                const isSuperAdmin = currentOperator?.role === 'super';
+                
+                const operatorListHTML = operators.length > 0 ? operators.map((op, idx) => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:8px; border-left:4px solid ${op.role === 'super' ? '#e91e63' : '#2196f3'};">
+                        <div style="flex:1; min-width:0;">
+                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                <strong>${op.name}</strong>
+                                <span style="background:${op.role === 'super' ? '#e91e63' : '#2196f3'}; color:white; padding:2px 8px; border-radius:12px; font-size:11px;">
+                                    ${op.role === 'super' ? '👑' : '🔧'}
+                                </span>
+                            </div>
+                            <div style="font-size:12px; color:#666; margin-top:4px; overflow:hidden; text-overflow:ellipsis;">
+                                📧 ${op.email || '이메일 없음'}
+                            </div>
+                        </div>
+                        ${isSuperAdmin && op.email !== currentOperator.email ? `
+                            <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                                <button class="btn" onclick="resetOperatorPassword(${idx})" style="padding:6px 8px; font-size:11px; background:#2196f3; color:white;" title="비밀번호 재설정 이메일 발송">🔑</button>
+                                <button class="btn" onclick="toggleOperatorRole(${idx})" style="padding:6px 8px; font-size:11px; background:#ff9800; color:white;" title="권한 변경">⚙️</button>
+                                <button class="btn" onclick="deleteOperator(${idx})" style="padding:6px 8px; font-size:11px; background:#f44336; color:white;" title="삭제">🗑️</button>
+                            </div>
+                        ` : ''}
+                    </div>
+                `).join('') : '<p style="text-align:center; color:#666; padding:20px;">등록된 운영자가 없습니다.</p>';
+                
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #e91e63 0%, #c2185b 100%);">
+                        <h1 style="color:white;">⚙️ 관리자 설정</h1>
+                        <p style="color:rgba(255,255,255,0.9);">운영자 관리 · 시스템 설정</p>
+                    </div>
+                    
+                    ${currentOperator ? `
+                        <div class="card" style="background:#e8f5e9; border-left:4px solid #4caf50;">
+                            <div style="display:flex; align-items:center; gap:12px;">
+                                <span style="font-size:32px;">${currentOperator.role === 'super' ? '👑' : '🔧'}</span>
+                                <div>
+                                    <strong>${currentOperator.name}</strong>님으로 로그인됨
+                                    <div style="font-size:12px; color:#666;">${currentOperator.role === 'super' ? '최고 관리자' : '일반 관리자'}</div>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    <!-- 운영자 관리 (최고관리자만) -->
+                    ${isSuperAdmin ? `
+                        <div class="card">
+                            <h3>👥 운영자 관리</h3>
+                            <p style="font-size:13px; color:#666; margin-bottom:12px;">운영자를 추가하거나 권한을 관리합니다.</p>
+                            
+                            <div style="display:grid; grid-template-columns:1fr auto; gap:8px; margin-bottom:8px;">
+                                <input type="text" id="new-operator-name" dir="ltr" lang="ko" placeholder="운영자 이름" style="padding:12px; border:1px solid var(--border); border-radius:8px;" autocomplete="off" spellcheck="false">
+                                <select id="new-operator-role" style="padding:12px; border:1px solid var(--border); border-radius:8px;">
+                                    <option value="admin">관리자</option>
+                                    <option value="super">최고관리자</option>
+                                </select>
+                            </div>
+                            <input type="email" id="new-operator-email" placeholder="이메일 (비밀번호 찾기용)" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px;">
+                            <input type="password" id="new-operator-password" placeholder="비밀번호 (6자 이상)" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; margin-bottom:12px;">
+                            <button class="btn btn-primary" onclick="addOperator()" style="width:100%;">➕ 운영자 추가</button>
+                            
+                            <div style="margin-top:16px; max-height:250px; overflow-y:auto;">
+                                ${operatorListHTML}
+                            </div>
+                        </div>
+                    ` : `
+                        <div class="card">
+                            <h3>👥 운영자 목록</h3>
+                            <p style="font-size:13px; color:#666; margin-bottom:12px;">운영자 관리는 최고 관리자만 가능합니다.</p>
+                            <div style="max-height:200px; overflow-y:auto;">
+                                ${operatorListHTML}
+                            </div>
+                        </div>
+                    `}
+                    
+                    <div class="card">
+                        <h3>🔑 내 비밀번호 변경</h3>
+                        <p style="font-size:13px; color:#666; margin-bottom:12px;">현재 로그인한 계정의 비밀번호를 변경합니다.</p>
+                        <button class="btn" onclick="changeMyPassword()" style="width:100%; background:#1976d2; color:white;">🔑 비밀번호 변경</button>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>💾 데이터 관리</h3>
+                        <div style="display:grid; gap:8px;">
+                            <button class="btn" onclick="exportAllData()" style="background:#4caf50; color:white;">📤 전체 데이터 내보내기</button>
+                            <button class="btn" onclick="importDataPrompt()" style="background:#2196f3; color:white;">📥 데이터 가져오기</button>
+                        </div>
+                    </div>
+                    
+                    ${isSuperAdmin ? `
+                        <div class="card" style="border:2px solid #f44336;">
+                            <h3 style="color:#f44336;">⚠️ 위험 구역</h3>
+                            <p style="font-size:13px; color:#666; margin-bottom:12px;">아래 작업은 되돌릴 수 없습니다.</p>
+                            <div style="display:grid; gap:8px;">
+                                <button class="btn" onclick="resetTournamentData()" style="background:#ff9800; color:white;">🏆 대회 데이터만 초기화</button>
+                                <button class="btn" onclick="resetOperators()" style="background:#e91e63; color:white;">👥 운영자 초기화 (재설정)</button>
+                                <button class="btn" onclick="factoryReset()" style="background:#f44336; color:white;">🔄 공장 초기화 (전체 삭제)</button>
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    <div class="card">
+                        <button class="btn" onclick="goTo('admin-home')" style="width:100%;">← 관리자 홈으로</button>
                     </div>
                 `;
             }
@@ -927,15 +1511,7 @@
                         ${tournamentList}
                     </div>
                     <div class="card">
-                        <h3>👥 심판 관리</h3>
-                        <p style="font-size:13px; color:var(--text-secondary); margin-bottom:12px;">심판 비밀번호를 추가/삭제합니다</p>
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                            <button type="button" class="btn btn-success" onclick="addRefereePassword()" style="width:100%;" aria-label="심판 추가">➕ 심판 추가</button>
-                            <button type="button" class="btn btn-danger" onclick="deleteRefereePassword()" style="width:100%;" aria-label="심판 삭제">🗑️ 심판 삭제</button>
-                        </div>
-                    </div>
-                    <div class="card">
-                        <button type="button" class="btn" onclick="goTo('home')" aria-label="모드 선택으로">← 모드 선택으로</button>
+                        <button type="button" class="btn" onclick="goTo('admin-home')" aria-label="관리자 홈으로">← 관리자 홈으로</button>
                     </div>
                 `;
             }
@@ -952,13 +1528,7 @@
                 const formatName = p.tournamentType === 'group-only' ? '조별 리그만' : 
                                    p.tournamentType === 'group-knockout' ? '조별 리그 + 토너먼트' : '토너먼트만';
                 
-                // 대회 규칙 표시
-                const rulesHTML = p.rules ? `
-                    <div style="background:#e3f2fd; padding:12px; border-radius:8px; margin-bottom:16px;">
-                        <div style="font-weight:600; margin-bottom:8px;">📋 대회 규칙</div>
-                        <div style="font-size:13px; white-space:pre-wrap;">${p.rules}</div>
-                    </div>
-                ` : '';
+                const rulesHTML = '';
                 
                 // 세트 수 정보
                 const setsInfo = [];
@@ -1053,13 +1623,185 @@
                         ${rulesHTML}
                         ${groupsHTML}
                         ${matchesHTML}
-                        
-                        <div style="margin-top:20px; padding-top:16px; border-top:1px solid #eee;">
-                            <button class="btn" onclick="shuffleGroups()" style="margin-right:8px;">🔀 조 다시 섞기</button>
-                            <button class="btn btn-danger" onclick="deleteTournament()">🗑️ 대회 삭제</button>
+                    </div>
+                    
+                    <!-- 대회 관리 메뉴 -->
+                    <div class="card">
+                        <h3 style="margin-bottom:12px;">📋 대회 관리</h3>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
+                            <button class="btn" onclick="goTo('edit-matches')" style="padding:12px; background:#2196f3; color:white;">
+                                ⚖️ 심판/경기장 배정
+                            </button>
+                            <button class="btn" onclick="goTo('tournament-court-manage')" style="padding:12px; background:#ff9800; color:white;">
+                                🏟️ 경기장 등록
+                            </button>
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                            <button class="btn" onclick="goTo('tournament-referee-manage')" style="padding:12px; background:#4caf50; color:white;">
+                                👥 심판 등록
+                            </button>
+                            <button class="btn" onclick="shuffleGroups()" style="padding:12px;">
+                                🔀 조 다시 섞기
+                            </button>
                         </div>
                     </div>
+                    
+                    <div class="card">
+                        <button class="btn btn-danger" onclick="deleteTournament()" style="width:100%;">🗑️ 대회 삭제</button>
+                    </div>
                 `;
+            }
+            // 최초 운영자 등록 화면
+            else if (screen === 'operator-setup') {
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #e91e63 0%, #c2185b 100%);">
+                        <h1 style="color:white;">👑 최초 운영자 등록</h1>
+                        <p style="color:rgba(255,255,255,0.9);">관리자 계정을 생성하세요</p>
+                    </div>
+                    <div class="card">
+                        <div style="text-align:center; margin-bottom:20px;">
+                            <span style="font-size:48px;">👑</span>
+                            <h3>최고 관리자 등록</h3>
+                            <p style="color:var(--text-secondary); font-size:14px;">처음 등록하는 운영자는 최고 관리자 권한을 갖습니다.</p>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>운영자 이름</label>
+                            <input type="text" id="first-operator-name" dir="ltr" lang="ko" placeholder="이름 입력" style="width:100%;" autocomplete="off" spellcheck="false">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>이메일 (비밀번호 찾기용)</label>
+                            <input type="email" id="first-operator-email" placeholder="example@email.com" style="width:100%;" autocomplete="email">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>비밀번호 (6자 이상)</label>
+                            <input type="password" id="first-operator-password" placeholder="비밀번호 입력" style="width:100%;">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>비밀번호 확인</label>
+                            <input type="password" id="first-operator-confirm" placeholder="비밀번호 다시 입력" style="width:100%;">
+                        </div>
+                        
+                        <button type="button" id="setup-btn" class="btn btn-primary" onclick="setupFirstOperator()" style="width:100%; background:linear-gradient(135deg, #e91e63 0%, #c2185b 100%);">👑 최고 관리자로 등록</button>
+                        
+                        <button type="button" class="btn" onclick="goTo('home')" style="width:100%; margin-top:12px;">← 모드 선택으로</button>
+                    </div>
+                    
+                    <div class="card" style="background:#e3f2fd;">
+                        <strong>📧 이메일 등록 필수!</strong>
+                        <p style="font-size:13px; margin:8px 0 0 0; color:#666;">
+                            비밀번호를 잊어버렸을 때 이메일로 재설정 링크를 받을 수 있습니다.
+                        </p>
+                    </div>
+                    
+                    <div class="card" style="background:#fff3e0;">
+                        <strong>💡 최고 관리자 권한</strong>
+                        <ul style="font-size:13px; margin:8px 0 0 0; padding-left:20px; color:#666;">
+                            <li>다른 운영자 추가/삭제</li>
+                            <li>운영자 권한 변경</li>
+                            <li>시스템 초기화</li>
+                            <li>모든 대회/심판/경기장 관리</li>
+                        </ul>
+                    </div>
+                `;
+                
+                setTimeout(() => {
+                    document.getElementById('first-operator-name')?.focus();
+                }, 100);
+            }
+            // 관리자 모드 로그인
+            else if (screen === 'admin-password') {
+                const operators = JSON.parse(localStorage.getItem('operators') || '[]');
+                
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);">
+                        <h1 style="color:white;">🔐 관리자 모드</h1>
+                        <p style="color:rgba(255,255,255,0.9);">운영자 로그인</p>
+                    </div>
+                    <div class="card">
+                        <div style="text-align:center; margin-bottom:20px;">
+                            <span style="font-size:48px;">🔐</span>
+                            <h3>운영자 로그인</h3>
+                            <p style="color:var(--text-secondary); font-size:14px;">등록된 이메일과 비밀번호로 로그인하세요</p>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>이메일</label>
+                            <input type="email" id="admin-email" placeholder="example@email.com" style="width:100%;" autocomplete="email">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>비밀번호</label>
+                            <input type="password" id="admin-pin" placeholder="비밀번호 입력" style="width:100%;">
+                        </div>
+                        
+                        <button type="button" id="admin-login-btn" class="btn btn-primary" onclick="verifyAdminPin()" style="width:100%;">로그인</button>
+                        
+                        <div style="text-align:center; margin-top:16px;">
+                            <button type="button" onclick="goTo('password-reset')" style="background:none; border:none; color:#1976d2; cursor:pointer; font-size:14px; text-decoration:underline;">
+                                🔑 비밀번호를 잊으셨나요?
+                            </button>
+                        </div>
+                        
+                        <button type="button" class="btn" onclick="goTo('home')" style="width:100%; margin-top:12px;">← 모드 선택으로</button>
+                    </div>
+                    
+                    <div class="card" style="background:#f5f5f5;">
+                        <p style="font-size:12px; color:#666; text-align:center; margin:0;">
+                            등록된 운영자: ${operators.length}명
+                        </p>
+                    </div>
+                `;
+                
+                setTimeout(() => {
+                    document.getElementById('admin-email')?.focus();
+                    document.getElementById('admin-pin')?.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') verifyAdminPin();
+                    });
+                }, 100);
+            }
+            // 비밀번호 찾기 화면
+            else if (screen === 'password-reset') {
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%);">
+                        <h1 style="color:white;">🔑 비밀번호 찾기</h1>
+                        <p style="color:rgba(255,255,255,0.9);">이메일로 재설정 링크 발송</p>
+                    </div>
+                    <div class="card">
+                        <div style="text-align:center; margin-bottom:20px;">
+                            <span style="font-size:48px;">📧</span>
+                            <h3>비밀번호 재설정</h3>
+                            <p style="color:var(--text-secondary); font-size:14px;">등록된 이메일 주소를 입력하시면<br>비밀번호 재설정 링크를 보내드립니다.</p>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>이메일 주소</label>
+                            <input type="email" id="reset-email" placeholder="example@email.com" style="width:100%;" autocomplete="email">
+                        </div>
+                        
+                        <button type="button" class="btn btn-primary" onclick="sendPasswordReset()" style="width:100%; background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%);">📧 재설정 링크 발송</button>
+                        
+                        <button type="button" class="btn" onclick="goTo('admin-password')" style="width:100%; margin-top:12px;">← 로그인으로 돌아가기</button>
+                    </div>
+                    
+                    <div class="card" style="background:#e8f5e9;">
+                        <strong>📬 이메일 확인</strong>
+                        <p style="font-size:13px; margin:8px 0 0 0; color:#666;">
+                            이메일이 도착하지 않으면 스팸 폴더를 확인해주세요.<br>
+                            Firebase에서 발송하는 이메일입니다.
+                        </p>
+                    </div>
+                `;
+                
+                setTimeout(() => {
+                    document.getElementById('reset-email')?.focus();
+                    document.getElementById('reset-email')?.addEventListener('keypress', (e) => {
+                        if (e.key === 'Enter') sendPasswordReset();
+                    });
+                }, 100);
             }
             else if (screen === 'bracket-password') {
                 // 대진 설정 비밀번호 입력
@@ -1171,7 +1913,6 @@
                         </div>
                         
                         <button type="button" class="btn btn-primary" onclick="verifyRefereePassword()" style="width:100%;">인증</button>
-                        
                         <button type="button" class="btn" onclick="goTo('home')" style="width:100%; margin-top:12px;">← 모드 선택으로</button>
                     </div>
                 `;
@@ -1184,12 +1925,38 @@
                 }, 100);
             }
             else if (screen === 'viewer-home') {
+                // 실시간 진행 중인 연습 경기 확인
+                const liveMatches = projects
+                    .filter(p => p.isPractice && p.isShared)
+                    .flatMap(p => p.matches || [])
+                    .filter(m => m.status === 'in-progress' && m.isShared);
+                
+                const liveMatchesHTML = liveMatches.length > 0 ? `
+                    <div style="background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%); padding:16px; border-radius:12px; margin-bottom:16px; color:white;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                            <span style="font-size:20px;">🔴</span>
+                            <strong>실시간 진행 중 (${liveMatches.length}경기)</strong>
+                        </div>
+                        ${liveMatches.map(m => `
+                            <div style="background:rgba(255,255,255,0.15); padding:12px; border-radius:8px; margin:8px 0; cursor:pointer;" onclick="watchLiveMatch(${m.id})">
+                                <div style="font-weight:600; font-size:16px;">${m.player1Name} vs ${m.player2Name}</div>
+                                <div style="font-size:14px; margin-top:4px; opacity:0.9;">
+                                    ${m.setScores ? m.setScores.map((s, i) => `[${s.player1}-${s.player2}]`).join(' ') : '0-0'}
+                                    ${m.type === 'team' ? '(팀전)' : `(${m.sets}세트)`}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : '';
+                
                 app.innerHTML = `
                     <div class="header" style="background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
                         <h1>👁️ 관람 모드</h1>
                         <p>실시간 점수 · 일정 조회 · 결과 확인</p>
                     </div>
                     <div class="card">
+                        ${liveMatchesHTML}
+                        
                         <div style="background:#e3f2fd; border-left:4px solid #2196f3; padding:12px; border-radius:8px; margin-bottom:16px;">
                             <strong>⚡ 🔍 경기 검색</strong><br>
                             <span style="font-size:14px;">선수명으로 경기를 검색하고 즐겨찾기 · 알림을 설정합니다.</span>
@@ -1207,10 +1974,18 @@
                         </button>
                         
                         <div style="background:#fff3e0; border-left:4px solid #ff9800; padding:12px; border-radius:8px; margin-bottom:16px;">
+                            <strong>🎯 연습 경기 실시간</strong><br>
+                            <span style="font-size:14px;">공유된 연습 경기를 실시간으로 확인합니다.</span>
+                        </div>
+                        <button type="button" class="btn" onclick="goTo('live-practice')" style="width:100%; margin-bottom:16px; background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%); color:white;" aria-label="연습 경기 실시간 보기">
+                            🔴 연습 경기 실시간
+                        </button>
+                        
+                        <div style="background:#fff3e0; border-left:4px solid #ff9800; padding:12px; border-radius:8px; margin-bottom:16px;">
                             <strong>📅 내 일정 조회</strong><br>
                             <span style="font-size:14px;">이름으로 내 경기 일정과 상대를 확인합니다.</span>
                         </div>
-                        <button type="button" class="btn" onclick="goTo('player-schedule')" style="width:100%; margin-bottom:16px; background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%); color:white;" aria-label="내 일정 조회">
+                        <button type="button" class="btn" onclick="goTo('player-schedule')" style="width:100%; margin-bottom:16px; background:#9c27b0; color:white;" aria-label="내 일정 조회">
                             📅 내 일정 조회
                         </button>
                         
@@ -1282,6 +2057,74 @@
                 renderViewerResults();
                 return;
             }
+            else if (screen === 'live-practice') {
+                // 실시간 연습 경기 목록
+                const liveMatches = projects
+                    .filter(p => p.isPractice && p.isShared)
+                    .flatMap(p => (p.matches || []).map(m => ({ ...m, projectName: p.name })))
+                    .filter(m => m.isShared);
+                
+                const inProgressMatches = liveMatches.filter(m => m.status === 'in-progress');
+                const completedMatches = liveMatches.filter(m => m.status === 'completed').slice(0, 10);
+                
+                const inProgressHTML = inProgressMatches.length > 0 ? inProgressMatches.map(m => `
+                    <div style="padding:16px; margin:8px 0; background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%); border-radius:12px; color:white; cursor:pointer;" onclick="watchLiveMatch(${m.id})">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                            <span style="animation: blink 1s infinite;">🔴</span>
+                            <strong>LIVE</strong>
+                        </div>
+                        <div style="font-size:18px; font-weight:600; margin-bottom:4px;">${m.player1Name} vs ${m.player2Name}</div>
+                        <div style="font-size:14px; opacity:0.9;">
+                            ${m.setScores ? m.setScores.map((s, i) => `${i === m.currentSet - 1 ? '▶' : ''}[${s.player1}-${s.player2}]`).join(' ') : '[0-0]'}
+                        </div>
+                        <div style="font-size:12px; margin-top:4px; opacity:0.8;">
+                            ${m.type === 'team' ? '팀전 31점' : `개인전 ${m.sets}세트`}
+                        </div>
+                    </div>
+                `).join('') : '<p style="text-align:center; color:#666; padding:20px;">현재 진행 중인 연습 경기가 없습니다</p>';
+                
+                const completedHTML = completedMatches.length > 0 ? completedMatches.map(m => `
+                    <div style="padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:8px; cursor:pointer;" onclick="watchLiveMatch(${m.id})">
+                        <div style="font-weight:600;">${m.player1Name} vs ${m.player2Name}</div>
+                        <div style="font-size:13px; color:#666; margin-top:4px;">
+                            ${m.setScores ? m.setScores.map(s => `[${s.player1}-${s.player2}]`).join(' ') : ''}
+                            · 승자: ${m.winner || '미정'}
+                        </div>
+                    </div>
+                `).join('') : '';
+                
+                app.innerHTML = `
+                    <div class="header" style="background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%);">
+                        <h1 style="color:white;">🔴 실시간 연습 경기</h1>
+                        <p style="color:rgba(255,255,255,0.9);">공유된 연습 경기를 실시간으로 확인</p>
+                    </div>
+                    <div class="card">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                            <h2 style="margin:0;">⏳ 진행 중 (${inProgressMatches.length})</h2>
+                            <button class="btn" onclick="render()" style="padding:8px 12px;">🔄 새로고침</button>
+                        </div>
+                        ${inProgressHTML}
+                    </div>
+                    
+                    ${completedMatches.length > 0 ? `
+                        <div class="card">
+                            <h2>✅ 최근 완료 (${completedMatches.length})</h2>
+                            ${completedHTML}
+                        </div>
+                    ` : ''}
+                    
+                    <div class="card">
+                        <button class="btn" onclick="goTo('viewer-home')" style="width:100%;">← 돌아가기</button>
+                    </div>
+                    
+                    <style>
+                        @keyframes blink {
+                            0%, 50% { opacity: 1; }
+                            51%, 100% { opacity: 0.3; }
+                        }
+                    </style>
+                `;
+            }
             else if (screen === 'player-schedule') {
                 // 선수/팀 일정 조회 화면
                 const tournamentProjects = projects.filter(p => p.tournamentType && p.matches?.length > 0);
@@ -1328,8 +2171,8 @@
             else if (screen === 'practice-mode') {
                 app.innerHTML = `
                     <div class="header" style="background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%);">
-                        <h1 style="color:white;">🎯 연습 경기</h1>
-                        <p style="color:rgba(255,255,255,0.9);">프로젝트 없이 바로 경기 진행</p>
+                        <h1 style="color:white;">🎯 심판 연습 모드</h1>
+                        <p style="color:rgba(255,255,255,0.9);">프로젝트 없이 바로 경기 진행 · 실시간 공유</p>
                     </div>
                     <div class="card">
                         <h2>경기 설정</h2>
@@ -1343,30 +2186,43 @@
                         </div>
                         
                         <div id="practice-sets-group" class="form-group">
-                            <label>세트 수</label>
+                            <label>세트 수 (개인전)</label>
                             <select id="practice-sets" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;">
-                                <option value="1">1세트</option>
+                                <option value="1">1세트 (단판)</option>
+                                <option value="2">2세트</option>
                                 <option value="3" selected>3세트 (2선승)</option>
+                                <option value="4">4세트</option>
                                 <option value="5">5세트 (3선승)</option>
                             </select>
                         </div>
                         
                         <div class="form-group">
-                            <label>선수 1</label>
-                            <input type="text" id="practice-player1" placeholder="이름 입력" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;">
+                            <label>선수/팀 1</label>
+                            <input type="text" id="practice-player1" dir="ltr" lang="ko" placeholder="이름 입력" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;" autocomplete="off" spellcheck="false">
                         </div>
                         
                         <div class="form-group">
-                            <label>선수 2</label>
-                            <input type="text" id="practice-player2" placeholder="이름 입력" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;">
+                            <label>선수/팀 2</label>
+                            <input type="text" id="practice-player2" dir="ltr" lang="ko" placeholder="이름 입력" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;" autocomplete="off" spellcheck="false">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="practice-share" checked style="margin-right:8px;">
+                                실시간 공유 (관람자가 경기 진행 상황을 볼 수 있음)
+                            </label>
                         </div>
                         
                         <button type="button" class="btn btn-primary" onclick="startPracticeMatch()" style="width:100%; margin-top:16px; background:linear-gradient(135deg, #ff9800 0%, #ff5722 100%);" aria-label="연습 경기 시작">
                             🎯 경기 시작
                         </button>
                         
-                        <button type="button" class="btn" onclick="goTo('referee-home')" style="width:100%; margin-top:8px;" aria-label="돌아가기">
-                            ← 돌아가기
+                        <button type="button" class="btn" onclick="goTo('practice-history')" style="width:100%; margin-top:8px;">
+                            📋 연습 기록 보기
+                        </button>
+                        
+                        <button type="button" class="btn" onclick="goTo('home')" style="width:100%; margin-top:8px;" aria-label="돌아가기">
+                            ← 홈으로
                         </button>
                     </div>
                 `;
@@ -1392,7 +2248,7 @@
                     <div class="card">
                         <div class="form-group">
                             <label>프로젝트 이름 <span style="color:#d32f2f;">*</span></label>
-                            <input type="text" id="qp-name" placeholder="예: 친선 경기, 연습 대회" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;" dir="ltr">
+                            <input type="text" id="qp-name" placeholder="예: 친선 경기, 연습 대회" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:16px;">
                         </div>
                         
                         <div class="form-group">
@@ -1634,7 +2490,7 @@
                 // 대회 대진 설정 위자드 (하이브리드 커스텀)
                 const tw = window.tournamentWizard || { 
                     step: 1, 
-                    mode: 'template', // 'template' or 'custom'
+                    mode: 'custom', // 커스텀만 사용
                     template: null,
                     info: { name: '', date: '', location: '', type: 'individual', rules: '' },
                     participants: [],
@@ -1674,13 +2530,9 @@
                 // 기본값 보장
                 if (!tw.preliminary) tw.preliminary = { enabled: true, groupCount: 4, perGroup: 4, sets: 3, advanceCount: 2, wildcards: 0, groupAssignment: 'random' };
                 if (!tw.finals) tw.finals = { enabled: true, size: 8, sets: 5, customBracket: [], sameGroupAvoid: 'quarterfinal' };
-                if (!tw.mode) tw.mode = 'template';
-                if (!tw.info.rules) tw.info.rules = '';
                 if (!tw.seedOrder) tw.seedOrder = [];
                 
-                const stepTitles = tw.mode === 'custom' 
-                    ? ['', '기본 정보', '참가자 등록', '예선 설정', '본선 설정', '대진표 확인', '심판/경기장 설정']
-                    : ['', '대회 정보', '참가자 등록', '대회 방식', '세부 설정', '대진표 확인', '심판/경기장 설정'];
+                const stepTitles = ['', '기본 정보', '참가자 등록', '예선 설정', '본선 설정', '대진표 확인', '심판/경기장 설정'];
                 const totalSteps = 6;
                 
                 // 페이지 타이틀 헤더
@@ -1707,91 +2559,33 @@
                 let stepContent = '';
                 
                 if (tw.step === 1) {
-                    // Step 1: 대회 기본 정보 + 모드 선택
+                    // Step 1: 대회 기본 정보
                     stepContent = `
                         <div class="form-group">
                             <label>대회명 <span style="color:#d32f2f;">*</span></label>
-                            <input type="text" id="tw-name" value="${tw.info.name}" placeholder="대회 이름을 입력하세요" style="width:100%;" dir="ltr">
+                            <input type="text" id="tw-name" value="${tw.info.name}" placeholder="대회 이름을 입력하세요" style="width:100%;" autocomplete="off" onchange="window.tournamentWizard.info.name=this.value;">
                         </div>
                         <div class="form-group">
                             <label>날짜</label>
-                            <input type="date" id="tw-date" value="${tw.info.date || new Date().toISOString().split('T')[0]}" style="width:100%;">
+                            <input type="date" id="tw-date" value="${tw.info.date || new Date().toISOString().split('T')[0]}" style="width:100%;" onchange="window.tournamentWizard.info.date=this.value;">
                         </div>
                         <div class="form-group">
                             <label>장소</label>
-                            <input type="text" id="tw-location" value="${tw.info.location}" placeholder="대회 장소를 입력하세요" style="width:100%;" dir="ltr">
+                            <input type="text" id="tw-location" value="${tw.info.location}" placeholder="대회 장소를 입력하세요" style="width:100%;" autocomplete="off" onchange="window.tournamentWizard.info.location=this.value;">
                         </div>
                         
-                        <div class="form-group">
-                            <label>대회 규칙 (자유 입력)</label>
-                            <textarea id="tw-rules" placeholder="대회 진행 방식, 특별 규칙 등을 자유롭게 입력하세요&#10;&#10;예시:&#10;- 조별 예선 후 상위 2명 본선 진출&#10;- 예선 3세트, 본선 5세트&#10;- A조 1위 vs B조 2위 방식" style="width:100%; height:100px; resize:vertical; padding:12px; border:1px solid var(--border); border-radius:8px; font-size:14px;">${tw.info.rules || ''}</textarea>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>설정 방식 <span style="color:#d32f2f;">*</span></label>
-                            <div style="display:flex; flex-direction:column; gap:12px; margin-top:8px;">
-                                <div style="display:block; padding:16px; background:${tw.mode === 'template' ? '#e3f2fd' : '#f5f5f5'}; border-radius:12px; cursor:pointer; border:2px solid ${tw.mode === 'template' ? '#1976d2' : 'transparent'};" onclick="window.tournamentWizard.mode='template';render();">
-                                    <div style="display:flex; align-items:center; gap:12px;">
-                                        <input type="radio" name="tw-mode" value="template" ${tw.mode === 'template' ? 'checked' : ''} style="pointer-events:none;">
-                                        <div style="flex:1;">
-                                            <div style="font-weight:600;">📋 템플릿 사용</div>
-                                            <div style="font-size:12px; color:#666; margin-top:4px;">기본 제공 형식으로 빠르게 설정</div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div style="display:block; padding:16px; background:${tw.mode === 'custom' ? '#e3f2fd' : '#f5f5f5'}; border-radius:12px; cursor:pointer; border:2px solid ${tw.mode === 'custom' ? '#1976d2' : 'transparent'};" onclick="window.tournamentWizard.mode='custom';render();">
-                                    <div style="display:flex; align-items:center; gap:12px;">
-                                        <input type="radio" name="tw-mode" value="custom" ${tw.mode === 'custom' ? 'checked' : ''} style="pointer-events:none;">
-                                        <div style="flex:1;">
-                                            <div style="font-weight:600;">⚙️ 커스텀 설정</div>
-                                            <div style="font-size:12px; color:#666; margin-top:4px;">조 편성, 세트 수, 대진표 직접 구성</div>
-                                        </div>
-                                    </div>
-                                </div>
+                        <div style="background:#e8f5e9; padding:16px; border-radius:12px; margin-top:8px;">
+                            <div style="font-weight:600; margin-bottom:8px;">✅ 커스텀 모드</div>
+                            <div style="font-size:13px; color:#666;">
+                                다음 단계에서 설정할 수 있는 항목:
+                                <ul style="margin:8px 0 0 16px; padding:0;">
+                                    <li>조 개수 및 편성 방식</li>
+                                    <li>예선/본선 세트 수</li>
+                                    <li>진출 인원 및 와일드카드</li>
+                                    <li>본선 대진표 직접 구성</li>
+                                </ul>
                             </div>
                         </div>
-                        
-                        ${tw.mode === 'template' ? `
-                            <div class="form-group">
-                                <label>대회 형식 <span style="color:#d32f2f;">*</span></label>
-                                <div style="display:flex; flex-direction:column; gap:10px; margin-top:8px;">
-                                    <div style="display:flex; align-items:center; gap:12px; padding:14px; background:${tw.template === 'group-only' ? '#e8f5e9' : '#f5f5f5'}; border-radius:8px; cursor:pointer; border:2px solid ${tw.template === 'group-only' ? '#4caf50' : 'transparent'};" onclick="window.tournamentWizard.template='group-only';render();">
-                                        <input type="radio" name="tw-template" value="group-only" ${tw.template === 'group-only' ? 'checked' : ''} style="pointer-events:none;">
-                                        <div>
-                                            <div style="font-weight:600;">📊 조별 리그</div>
-                                            <div style="font-size:11px; color:#666;">조별로 풀리그 진행 후 순위 결정</div>
-                                        </div>
-                                    </div>
-                                    <div style="display:flex; align-items:center; gap:12px; padding:14px; background:${tw.template === 'group-knockout' ? '#e8f5e9' : '#f5f5f5'}; border-radius:8px; cursor:pointer; border:2px solid ${tw.template === 'group-knockout' ? '#4caf50' : 'transparent'};" onclick="window.tournamentWizard.template='group-knockout';render();">
-                                        <input type="radio" name="tw-template" value="group-knockout" ${tw.template === 'group-knockout' ? 'checked' : ''} style="pointer-events:none;">
-                                        <div>
-                                            <div style="font-weight:600;">🏆 조별 예선 + 본선</div>
-                                            <div style="font-size:11px; color:#666;">조별 리그 후 상위자 토너먼트</div>
-                                        </div>
-                                    </div>
-                                    <div style="display:flex; align-items:center; gap:12px; padding:14px; background:${tw.template === 'knockout-only' ? '#e8f5e9' : '#f5f5f5'}; border-radius:8px; cursor:pointer; border:2px solid ${tw.template === 'knockout-only' ? '#4caf50' : 'transparent'};" onclick="window.tournamentWizard.template='knockout-only';render();">
-                                        <input type="radio" name="tw-template" value="knockout-only" ${tw.template === 'knockout-only' ? 'checked' : ''} style="pointer-events:none;">
-                                        <div>
-                                            <div style="font-weight:600;">🥊 토너먼트</div>
-                                            <div style="font-size:11px; color:#666;">녹아웃 방식 토너먼트</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        ` : `
-                            <div style="background:#e8f5e9; padding:16px; border-radius:12px; margin-top:8px;">
-                                <div style="font-weight:600; margin-bottom:8px;">✅ 커스텀 모드 선택됨</div>
-                                <div style="font-size:13px; color:#666;">
-                                    다음 단계에서 설정할 수 있는 항목:
-                                    <ul style="margin:8px 0 0 16px; padding:0;">
-                                        <li>조 개수 및 편성 방식</li>
-                                        <li>예선/본선 세트 수</li>
-                                        <li>진출 인원 및 와일드카드</li>
-                                        <li>본선 대진표 직접 구성</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        `}
                     `;
                 } else if (tw.step === 2) {
                     // Step 2: 참가자 등록
@@ -1801,7 +2595,7 @@
                         <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:var(--bg-secondary); border-radius:6px; margin:4px 0;">
                             <div style="display:flex; align-items:center; gap:8px;">
                                 <span style="background:#1976d2; color:white; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600;">${i+1}</span>
-                                <span style="direction:ltr; unicode-bidi:bidi-override;">${p}</span>
+                                <span>${p}</span>
                             </div>
                             <div style="display:flex; gap:4px;">
                                 ${i > 0 ? `<button class="btn" onclick="moveTWParticipant(${i}, -1)" style="padding:4px 8px; min-width:auto; font-size:12px;">↑</button>` : ''}
@@ -1820,7 +2614,7 @@
                         <div class="form-group">
                             <label>참가자 추가</label>
                             <div style="display:flex; gap:8px; margin-top:8px;">
-                                <input type="text" id="tw-participant" placeholder="이름 입력 (쉼표로 여러 명 구분)" style="flex:1;" dir="ltr" onkeypress="if(event.key==='Enter')addTWParticipant()">
+                                <input type="text" id="tw-participant" dir="ltr" lang="ko" placeholder="이름 입력 (쉼표로 여러 명 구분)" style="flex:1;" autocomplete="off" spellcheck="false" inputmode="text" onkeypress="if(event.key==='Enter')addTWParticipant()">
                                 <button class="btn btn-primary" onclick="addTWParticipant()">추가</button>
                             </div>
                         </div>
@@ -2157,7 +2951,7 @@
                         
                         <div class="form-group">
                             <label>심판 이름</label>
-                            <input type="text" id="tw-ref-name" placeholder="예: 홍길동" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px;">
+                            <input type="text" id="tw-ref-name" placeholder="예: 홍길동" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px;" autocomplete="off">
                         </div>
                         
                         <div class="form-group">
@@ -2171,7 +2965,7 @@
                         
                         <div class="form-group">
                             <label>PIN 번호 (6자리 이상)</label>
-                            <input type="text" id="tw-ref-pin" placeholder="예: 123456" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px;" maxlength="10">
+                            <input type="text" id="tw-ref-pin" placeholder="예: 123456" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px;" autocomplete="off" maxlength="10">
                             <small style="color:#666;">숫자만 입력 가능합니다</small>
                         </div>
                         
@@ -2190,7 +2984,7 @@
                             
                             <div class="form-group">
                                 <label>경기장 이름</label>
-                                <input type="text" id="tw-court-name" placeholder="예: 1번 코트" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px;">
+                                <input type="text" id="tw-court-name" placeholder="예: 1번 코트" style="width:100%; padding:12px; border:1px solid var(--border); border-radius:8px;" autocomplete="off">
                             </div>
                             
                             <button class="btn btn-success" onclick="addTWCourt()" style="width:100%; margin-bottom:16px;">➕ 경기장 추가</button>
@@ -2273,13 +3067,7 @@
                 const hasAutoResult = currentProject.autoTournamentResult;
                 const hasGroups = currentProject.groups?.length > 0;
                 
-                // 대회 규칙 표시
-                const rulesHTML = currentProject.rules ? `
-                    <div style="background:#e3f2fd; padding:12px; border-radius:8px; margin-bottom:16px;">
-                        <div style="font-weight:600; margin-bottom:8px;">📋 대회 규칙</div>
-                        <div style="font-size:13px; white-space:pre-wrap;">${currentProject.rules}</div>
-                    </div>
-                ` : '';
+                const rulesHTML = '';
                 
                 // 세트 수 정보
                 const setsInfo = [];
@@ -2385,7 +3173,7 @@
                             </div>
                             
                             <div style="display:grid; grid-template-columns:1fr auto auto; gap:8px; margin-bottom:16px;">
-                                <input type="text" id="rtl-name" placeholder="이름" style="width:100%;" aria-label="참가자 이름 입력">
+                                <input type="text" id="rtl-name" placeholder="이름" style="width:100%;" autocomplete="off" aria-label="참가자 이름 입력">
                                 <select id="rtl-gender" style="width:80px;" aria-label="성별 선택">
                                     <option value="M">남</option>
                                     <option value="F">여</option>
@@ -2549,11 +3337,95 @@
                         updateRTLGroupPreview();
                     }, 0);
                 } else if (rtl.phase === 'teams-generated') {
+                    // 편집 모드 체크
+                    if (rtl.editPhase === 'group-edit') {
+                        // 조 편성 수정 화면
+                        const groupCount = rtl.groupCount || 2;
+                        
+                        // 조 배정 초기화
+                        if (!rtl.groupAssignments) {
+                            rtl.groupAssignments = [];
+                            rtl.teams.forEach((t, idx) => {
+                                const round = Math.floor(idx / groupCount);
+                                const groupIdx = round % 2 === 0 ? idx % groupCount : groupCount - 1 - (idx % groupCount);
+                                rtl.groupAssignments[idx] = groupIdx;
+                            });
+                        }
+                        
+                        // 조별 팀 목록 생성
+                        let groupsHTML = '';
+                        for (let g = 0; g < groupCount; g++) {
+                            const groupTeams = rtl.teams
+                                .map((t, idx) => ({ ...t, originalIdx: idx }))
+                                .filter((t, idx) => rtl.groupAssignments[t.originalIdx] === g);
+                            
+                            groupsHTML += `
+                                <div style="background:#f5f5f5; padding:12px; border-radius:8px; margin-bottom:12px;">
+                                    <h4 style="margin:0 0 8px 0; color:#1976d2;">${String.fromCharCode(65 + g)}조 (${groupTeams.length}팀)</h4>
+                                    ${groupTeams.map(t => `
+                                        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px; background:white; border-radius:6px; margin:4px 0;">
+                                            <span>${t.name}</span>
+                                            <select onchange="moveRTLTeamToGroup(${t.originalIdx}, parseInt(this.value))" style="padding:4px 8px;">
+                                                ${Array(groupCount).fill(0).map((_, gi) => 
+                                                    `<option value="${gi}" ${gi === g ? 'selected' : ''}>${String.fromCharCode(65 + gi)}조</option>`
+                                                ).join('')}
+                                            </select>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            `;
+                        }
+                        
+                        content = `
+                            <div class="card">
+                                <button class="btn" onclick="window.randomTeamLeague.editPhase=null; render();" style="margin-bottom:16px;">← 돌아가기</button>
+                                <h2>✏️ 조 편성 수정</h2>
+                                <p style="font-size:13px; color:#666; margin-bottom:16px;">각 팀을 원하는 조로 이동하세요</p>
+                                ${groupsHTML}
+                                <button class="btn btn-primary" onclick="window.randomTeamLeague.editPhase=null; render();" style="width:100%;">✓ 수정 완료</button>
+                            </div>
+                        `;
+                    } else if (rtl.editPhase === 'match-order') {
+                        // 대진표 보기/수정 화면
+                        if (!rtl.matchOrder) {
+                            rtl.matchOrder = [];
+                            let matchNum = 0;
+                            for (let i = 0; i < rtl.teams.length; i++) {
+                                for (let j = i + 1; j < rtl.teams.length; j++) {
+                                    rtl.matchOrder.push({ team1: i, team2: j, order: matchNum++ });
+                                }
+                            }
+                        }
+                        
+                        const matchesHTML = rtl.matchOrder.map((m, idx) => `
+                            <div style="display:flex; align-items:center; gap:8px; padding:10px; background:#f5f5f5; border-radius:6px; margin:4px 0;">
+                                <span style="min-width:30px; font-weight:600; color:#666;">${idx + 1}</span>
+                                <span style="flex:1;">${rtl.teams[m.team1]?.name || '팀1'} vs ${rtl.teams[m.team2]?.name || '팀2'}</span>
+                                <div style="display:flex; gap:4px;">
+                                    ${idx > 0 ? `<button class="btn" onclick="moveRTLMatch(${idx}, -1)" style="padding:4px 8px; min-width:auto;">↑</button>` : ''}
+                                    ${idx < rtl.matchOrder.length - 1 ? `<button class="btn" onclick="moveRTLMatch(${idx}, 1)" style="padding:4px 8px; min-width:auto;">↓</button>` : ''}
+                                </div>
+                            </div>
+                        `).join('');
+                        
+                        content = `
+                            <div class="card">
+                                <button class="btn" onclick="window.randomTeamLeague.editPhase=null; render();" style="margin-bottom:16px;">← 돌아가기</button>
+                                <h2>📋 대진표</h2>
+                                <p style="font-size:13px; color:#666; margin-bottom:16px;">경기 순서를 변경하려면 ↑↓ 버튼을 사용하세요</p>
+                                <div style="max-height:400px; overflow-y:auto;">
+                                    ${matchesHTML}
+                                </div>
+                                <button class="btn btn-primary" onclick="window.randomTeamLeague.editPhase=null; render();" style="width:100%; margin-top:16px;">✓ 수정 완료</button>
+                            </div>
+                        `;
+                    } else {
                     // 팀 생성 완료 - 팀 이름 입력 가능
                     const tournamentType = rtl.tournamentType || 'full-league';
                     const isGroupTournament = tournamentType === 'group-tournament';
                     const groupCount = rtl.groupCount || 2;
                     const advanceCount = rtl.advanceCount || 2;
+                    const rtlSets = rtl.sets || 3;
                     
                     // 조별+토너먼트인 경우 조 편성 미리보기
                     let groupAssignmentHTML = '';
@@ -2562,15 +3434,14 @@
                         const remainder = rtl.teams.length % groupCount;
                         
                         groupAssignmentHTML = '<div style="background:#e3f2fd; padding:12px; border-radius:8px; margin-bottom:16px;">';
+                        groupAssignmentHTML += `<div style="display:flex; justify-content:space-between; align-items:center;">`;
                         groupAssignmentHTML += `<strong>📋 조별 리그 + 토너먼트</strong>`;
-                        groupAssignmentHTML += `<p style="font-size:12px; margin-top:4px; color:#666;">`;
+                        groupAssignmentHTML += `<button class="btn" onclick="goToRTLGroupEdit()" style="padding:4px 12px; font-size:12px;">✏️ 조 편성 수정</button>`;
+                        groupAssignmentHTML += `</div>`;
+                        groupAssignmentHTML += `<div style="font-size:12px; margin-top:8px; color:#666;">`;
                         
                         for (let g = 0; g < groupCount; g++) {
-                            const gTeams = teamsPerGroup + (g < remainder ? 1 : 0);
-                            const startIdx = g * teamsPerGroup + Math.min(g, remainder);
                             const teamNames = [];
-                            
-                            // 스네이크 방식으로 배정될 팀들 계산
                             rtl.teams.forEach((t, idx) => {
                                 const round = Math.floor(idx / groupCount);
                                 const groupIdx = round % 2 === 0 ? idx % groupCount : groupCount - 1 - (idx % groupCount);
@@ -2578,28 +3449,31 @@
                                     teamNames.push(t.name.match(/^\d+조$/) ? `팀${idx+1}` : t.name);
                                 }
                             });
-                            
-                            groupAssignmentHTML += `${String.fromCharCode(65 + g)}조: ${teamNames.join(', ')}<br>`;
+                            groupAssignmentHTML += `<strong>${String.fromCharCode(65 + g)}조:</strong> ${teamNames.join(', ')}<br>`;
                         }
                         
-                        groupAssignmentHTML += `</p>`;
+                        groupAssignmentHTML += `</div>`;
                         groupAssignmentHTML += `<p style="font-size:12px; margin-top:6px; color:#1976d2;">🎯 각 조 상위 ${advanceCount}팀 → 결선 토너먼트</p>`;
                         groupAssignmentHTML += '</div>';
                     } else {
+                        const totalMatches = rtl.teams.length * (rtl.teams.length - 1) / 2;
                         groupAssignmentHTML = `<div style="background:#e8f5e9; padding:12px; border-radius:8px; margin-bottom:16px;">
-                            <strong>📋 풀리그</strong>
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <strong>📋 풀리그</strong>
+                                <button class="btn" onclick="goToRTLMatchOrder()" style="padding:4px 12px; font-size:12px;">📋 대진표 보기</button>
+                            </div>
                             <p style="font-size:12px; margin-top:4px; color:#666;">
-                                모든 팀이 서로 한 번씩 대전 → 총 ${rtl.teams.length * (rtl.teams.length - 1) / 2}경기
+                                모든 팀이 서로 한 번씩 대전 → 총 ${totalMatches}경기
                             </p>
                         </div>`;
                     }
                     
                     const teamsHTML = rtl.teams.map((team, ti) => `
                         <div style="padding:12px; margin:8px 0; background:var(--bg-secondary); border-radius:8px; border-left:4px solid hsl(${ti * 60}, 70%, 50%);">
-                            <input type="text" id="team-name-${ti}" value="${team.name}" 
+                            <input type="text" id="team-name-${ti}" value="${team.name}" dir="ltr" lang="ko"
                                    onchange="updateRTLTeamName(${ti}, this.value)"
                                    style="font-weight:bold; font-size:16px; border:2px dashed #ccc; padding:6px 10px; border-radius:6px; width:calc(100% - 24px);"
-                                   placeholder="팀 이름 입력">
+                                   placeholder="팀 이름 입력" autocomplete="off" spellcheck="false">
                             <div style="margin-top:8px;">
                                 ${team.members.map((m, mi) => {
                                     const isTopseed = team.topseed === m.name;
@@ -2621,8 +3495,32 @@
                             <h2>🎲 팀 편성 결과</h2>
                             
                             <div style="background:#fff3e0; padding:12px; border-radius:8px; margin-bottom:16px;">
-                                <strong>3단계: 팀 이름 정하기</strong>
-                                <p style="font-size:13px; margin-top:4px;">각 팀에서 팀 이름을 정해주세요! (🏆 = 탑시드)</p>
+                                <strong>3단계: 대진 설정</strong>
+                                <p style="font-size:13px; margin-top:4px;">팀 이름을 정하고 경기 규칙을 설정하세요 (🏆 = 탑시드)</p>
+                            </div>
+                            
+                            <!-- 세트 수 설정 -->
+                            <div style="background:#f5f5f5; padding:12px; border-radius:8px; margin-bottom:16px;">
+                                <strong style="display:block; margin-bottom:8px;">🏅 경기 규칙</strong>
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                                    <div>
+                                        <label style="font-size:13px;">세트 수</label>
+                                        <select id="rtl-match-sets" onchange="window.randomTeamLeague.sets=parseInt(this.value);" style="width:100%;">
+                                            <option value="1" ${rtlSets===1?'selected':''}>1세트 (단판)</option>
+                                            <option value="2" ${rtlSets===2?'selected':''}>2세트</option>
+                                            <option value="3" ${rtlSets===3?'selected':''}>3세트 (2선승)</option>
+                                            <option value="4" ${rtlSets===4?'selected':''}>4세트</option>
+                                            <option value="5" ${rtlSets===5?'selected':''}>5세트 (3선승)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="font-size:13px;">경기 유형</label>
+                                        <select id="rtl-match-type" onchange="window.randomTeamLeague.matchType=this.value;" style="width:100%;">
+                                            <option value="team" ${(rtl.matchType||'team')==='team'?'selected':''}>팀전 (31점)</option>
+                                            <option value="individual" ${rtl.matchType==='individual'?'selected':''}>개인전 (11점)</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
                             
                             ${groupAssignmentHTML}
@@ -2635,6 +3533,7 @@
                             </div>
                         </div>
                     `;
+                    } // else 블록 (일반 teams-generated) 닫기
                 }
                 
                 app.innerHTML = content;
@@ -2644,7 +3543,7 @@
                     <div class="card">
                         <h2>새 프로젝트 생성</h2>
                         <label for="project-name">프로젝트명 *</label>
-                        <input type="text" id="project-name" placeholder="예: 2025 전국장애인체육대회" aria-label="프로젝트명 입력">
+                        <input type="text" id="project-name" placeholder="예: 2025 전국장애인체육대회" style="text-align:left;" autocomplete="off" aria-label="프로젝트명 입력">
                         
                         <label for="competition-type">경기 종류 *</label>
                         <select id="competition-type" onchange="onCompetitionTypeChange()" aria-label="경기 종류 선택">
@@ -2654,19 +3553,19 @@
                         
                         <label style="margin-top:16px; margin-bottom:8px; display:block;">대회 유형 *</label>
                         <div id="tournament-type-cards" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                            <button type="button" class="tournament-type-btn active" data-type="free" onclick="selectTournamentType('free')" style="padding:16px; border:2px solid var(--primary); border-radius:8px; background:white; cursor:pointer; text-align:left;">
+                            <button type="button" class="tournament-type-btn active" data-type="free" onclick="selectTournamentType('free')" style="padding:16px; border:2px solid var(--primary); border-radius:8px; background:white; cursor:pointer;">
                                 <div style="font-weight:bold; font-size:16px;">📋 자유 경기</div>
                                 <div style="font-size:12px; color:#666; margin-top:4px;">대진 없이 경기만 기록</div>
                             </button>
-                            <button type="button" class="tournament-type-btn" data-type="group" onclick="selectTournamentType('group')" style="padding:16px; border:2px solid #ddd; border-radius:8px; background:white; cursor:pointer; text-align:left;">
+                            <button type="button" class="tournament-type-btn" data-type="group" onclick="selectTournamentType('group')" style="padding:16px; border:2px solid #ddd; border-radius:8px; background:white; cursor:pointer;">
                                 <div style="font-weight:bold; font-size:16px;">🏆 조별 리그</div>
                                 <div style="font-size:12px; color:#666; margin-top:4px;">모든 팀이 한 번씩 대결</div>
                             </button>
-                            <button type="button" class="tournament-type-btn" data-type="tournament" onclick="selectTournamentType('tournament')" style="padding:16px; border:2px solid #ddd; border-radius:8px; background:white; cursor:pointer; text-align:left;">
+                            <button type="button" class="tournament-type-btn" data-type="tournament" onclick="selectTournamentType('tournament')" style="padding:16px; border:2px solid #ddd; border-radius:8px; background:white; cursor:pointer;">
                                 <div style="font-weight:bold; font-size:16px;">🥊 토너먼트</div>
                                 <div style="font-size:12px; color:#666; margin-top:4px;">지면 탈락하는 녹아웃</div>
                             </button>
-                            <button type="button" class="tournament-type-btn" data-type="group-tournament" onclick="selectTournamentType('group-tournament')" style="padding:16px; border:2px solid #ddd; border-radius:8px; background:white; cursor:pointer; text-align:left;">
+                            <button type="button" class="tournament-type-btn" data-type="group-tournament" onclick="selectTournamentType('group-tournament')" style="padding:16px; border:2px solid #ddd; border-radius:8px; background:white; cursor:pointer;">
                                 <div style="font-weight:bold; font-size:16px;">🎯 조별+토너먼트</div>
                                 <div style="font-size:12px; color:#666; margin-top:4px;">조별 예선 → 결선 토너먼트</div>
                             </button>
@@ -2711,9 +3610,9 @@
                         </div>
                         
                         <label for="project-date" style="margin-top:16px;">날짜 (선택사항)</label>
-                        <input type="text" id="project-date" placeholder="예: 2025-03-15 또는 3월 15일" aria-label="대회 날짜 입력">
+                        <input type="text" id="project-date" placeholder="예: 2025-03-15 또는 3월 15일" style="text-align:left;" autocomplete="off" aria-label="대회 날짜 입력">
                         <label for="project-location">장소 (선택사항)</label>
-                        <input type="text" id="project-location" placeholder="예: 서울종합운동장" aria-label="대회 장소 입력">
+                        <input type="text" id="project-location" placeholder="예: 서울종합운동장" style="text-align:left;" autocomplete="off" aria-label="대회 장소 입력">
                         <label for="project-desc">설명 (선택사항)</label>
                         <textarea id="project-desc" rows="3" placeholder="프로젝트 설명" aria-label="프로젝트 설명 입력"></textarea>
                         <div class="action-row">
@@ -3052,6 +3951,10 @@
                     </div>
                 `).join('');
                 
+                // 경기장 배정 모드 (저장된 값 또는 기본값)
+                const courtAssignMode = currentProject.courtAssignMode || 'manual';
+                const fixedCourt = currentProject.fixedCourt || '';
+                
                 app.innerHTML = `
                     <div class="card">
                         <div style="background:linear-gradient(135deg, #2196f3 0%, #1976d2 100%); color:white; padding:16px; border-radius:8px; margin:-20px -20px 20px -20px;">
@@ -3071,7 +3974,56 @@
                                 <strong>⚠️ 경기장을 먼저 등록해주세요</strong>
                                 <p style="font-size:13px; margin:4px 0 0 0;">대진 설정에서 경기장을 추가하면 여기서 배정할 수 있습니다.</p>
                             </div>
-                        ` : ''}
+                        ` : `
+                            <!-- 경기장 배정 모드 설정 -->
+                            <div style="background:#e3f2fd; padding:16px; border-radius:8px; margin-bottom:16px;">
+                                <strong style="display:block; margin-bottom:12px;">🏟️ 경기장 배정 모드</strong>
+                                
+                                <div style="display:grid; gap:8px; margin-bottom:12px;">
+                                    <label style="display:flex; align-items:center; gap:8px; padding:10px; background:white; border-radius:6px; cursor:pointer; border:2px solid ${courtAssignMode==='manual'?'#1976d2':'transparent'};">
+                                        <input type="radio" name="court-mode" value="manual" ${courtAssignMode==='manual'?'checked':''} onchange="setCourtAssignMode('manual')">
+                                        <div>
+                                            <strong>수동 배정</strong>
+                                            <span style="font-size:12px; color:#666;"> - 각 경기마다 직접 선택</span>
+                                        </div>
+                                    </label>
+                                    
+                                    <label style="display:flex; align-items:center; gap:8px; padding:10px; background:white; border-radius:6px; cursor:pointer; border:2px solid ${courtAssignMode==='fixed'?'#1976d2':'transparent'};">
+                                        <input type="radio" name="court-mode" value="fixed" ${courtAssignMode==='fixed'?'checked':''} onchange="setCourtAssignMode('fixed')">
+                                        <div>
+                                            <strong>경기장 고정</strong>
+                                            <span style="font-size:12px; color:#666;"> - 모든 경기를 한 경기장에서 진행</span>
+                                        </div>
+                                    </label>
+                                    
+                                    <label style="display:flex; align-items:center; gap:8px; padding:10px; background:white; border-radius:6px; cursor:pointer; border:2px solid ${courtAssignMode==='rotate'?'#1976d2':'transparent'};">
+                                        <input type="radio" name="court-mode" value="rotate" ${courtAssignMode==='rotate'?'checked':''} onchange="setCourtAssignMode('rotate')">
+                                        <div>
+                                            <strong>자동 순환</strong>
+                                            <span style="font-size:12px; color:#666;"> - 경기장을 순서대로 자동 배정</span>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                ${courtAssignMode === 'fixed' ? `
+                                    <div style="margin-top:12px;">
+                                        <label style="font-size:13px; font-weight:600;">고정 경기장 선택:</label>
+                                        <select id="fixed-court-select" onchange="setFixedCourt(this.value)" style="width:100%; margin-top:6px; padding:10px; border-radius:6px;">
+                                            <option value="">-- 선택 --</option>
+                                            ${courts.map(c => `<option value="${c.name}" ${fixedCourt===c.name?'selected':''}>${c.name}</option>`).join('')}
+                                        </select>
+                                        ${fixedCourt ? `<button class="btn btn-primary" onclick="applyFixedCourt()" style="width:100%; margin-top:8px;">✓ 모든 경기에 적용</button>` : ''}
+                                    </div>
+                                ` : ''}
+                                
+                                ${courtAssignMode === 'rotate' ? `
+                                    <div style="margin-top:12px;">
+                                        <button class="btn btn-primary" onclick="applyRotateCourt()" style="width:100%;">🔄 경기장 자동 순환 배정</button>
+                                        <p style="font-size:12px; color:#666; margin-top:6px;">경기 1→${courts[0]?.name}, 경기 2→${courts[1]?.name || courts[0]?.name}, ...</p>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `}
                         
                         <div style="background:#e8f5e9; padding:12px; border-radius:8px; margin-bottom:16px;">
                             <strong>📊 현황</strong>
@@ -3112,9 +4064,9 @@
                         <div style="margin-bottom:16px; padding:16px; background:var(--bg-secondary); border-radius:8px;">
                             <h3 style="margin-bottom:12px;">새 팀 추가</h3>
                             <label>팀명 *</label>
-                            <input type="text" id="new-team-name" placeholder="예: 서울팀">
+                            <input type="text" id="new-team-name" placeholder="예: 서울팀" style="text-align:left;" autocomplete="off">
                             <label style="margin-top:12px;">선수 (쉼표로 구분, 성별 표시: 이름/남 또는 이름/여)</label>
-                            <input type="text" id="new-team-members" placeholder="예: 홍길동/남, 김영희/여, 이순신/남">
+                            <input type="text" id="new-team-members" placeholder="예: 홍길동/남, 김영희/여, 이순신/남" style="text-align:left;" autocomplete="off">
                             <button class="btn btn-primary" onclick="addTeam()" style="margin-top:12px; width:100%;">팀 추가</button>
                         </div>
                         
@@ -3164,7 +4116,7 @@
                         <div style="margin-bottom:16px; padding:16px; background:var(--bg-secondary); border-radius:8px;">
                             <label>선수 추가</label>
                             <div style="display:flex; gap:8px;">
-                                <input type="text" id="new-player-name" placeholder="선수 이름" style="flex:1;">
+                                <input type="text" id="new-player-name" placeholder="선수 이름" style="flex:1;" autocomplete="off">
                                 <button class="btn btn-primary" onclick="addPlayer()">추가</button>
                             </div>
                             <p style="font-size:12px; color:var(--text-secondary); margin-top:4px;">여러 명: 쉼표로 구분 (예: 홍길동, 이순신)</p>
@@ -3377,7 +4329,7 @@
                                             <thead>
                                                 <tr style="background:var(--bg-secondary);">
                                                     <th style="padding:8px; text-align:center;">순위</th>
-                                                    <th style="padding:8px; text-align:left;">선수</th>
+                                                    <th style="padding:8px;">선수</th>
                                                     <th style="padding:8px; text-align:center;">경기</th>
                                                     <th style="padding:8px; text-align:center;">승</th>
                                                     <th style="padding:8px; text-align:center;">패</th>
@@ -3465,7 +4417,7 @@
                             <table style="width:100%; border-collapse:collapse; font-size:14px;">
                                 <thead>
                                     <tr style="background:var(--bg-secondary);">
-                                        <th style="padding:8px; text-align:left;">선수</th>
+                                        <th style="padding:8px;">선수</th>
                                         <th style="padding:8px; text-align:center;">경기</th>
                                         <th style="padding:8px; text-align:center;">승</th>
                                         <th style="padding:8px; text-align:center;">패</th>
@@ -3640,9 +4592,9 @@
                         
                         <h3 style="margin-top:20px">선수 정보</h3>
                         <label id="player1-label">선수 1 이름 *</label>
-                        <input type="text" id="player1" placeholder="선수 1">
+                        <input type="text" id="player1" placeholder="선수 1" style="text-align:left;" autocomplete="off">
                         <label id="player2-label">선수 2 이름 *</label>
-                        <input type="text" id="player2" placeholder="선수 2">
+                        <input type="text" id="player2" placeholder="선수 2" style="text-align:left;" autocomplete="off">
                         
                         <div id="team-lineup" style="display:none;">
                             <h3 style="margin-top:20px">팀 라인업</h3>
@@ -4164,7 +5116,7 @@
                 }
                 screen = 'referee-password';
             } else {
-                isAuthenticated = false; // 관람 모드는 인증 안 됨
+                isAuthenticated = false;
                 screen = 'viewer-home';
             }
             render();
@@ -4547,6 +5499,7 @@
             const playerName = player === 'player1' ? currentMatch.player1Name : currentMatch.player2Name;
             
             saveProjects();
+            updateLiveMatch(); // 실시간 공유 업데이트
             renderMatch();
             
             // aria-live 실시간 안내 (서브권 기준 스코어 순서)
@@ -7281,6 +8234,61 @@
             window.randomTeamLeague.teams[teamIndex].name = newName.trim() || `${teamIndex+1}조`;
         }
         
+        // 랜덤 팀리그 조 편성 수정 화면으로 이동
+        function goToRTLGroupEdit() {
+            window.randomTeamLeague.editPhase = 'group-edit';
+            render();
+        }
+        
+        // 랜덤 팀리그 대진표 보기 화면으로 이동
+        function goToRTLMatchOrder() {
+            window.randomTeamLeague.editPhase = 'match-order';
+            render();
+        }
+        
+        // 조 이동
+        function moveRTLTeamToGroup(teamIdx, newGroupIdx) {
+            const rtl = window.randomTeamLeague;
+            if (!rtl.groupAssignments) {
+                // 조 배정 초기화
+                const groupCount = rtl.groupCount || 2;
+                rtl.groupAssignments = [];
+                rtl.teams.forEach((t, idx) => {
+                    const round = Math.floor(idx / groupCount);
+                    const groupIdx = round % 2 === 0 ? idx % groupCount : groupCount - 1 - (idx % groupCount);
+                    rtl.groupAssignments[idx] = groupIdx;
+                });
+            }
+            rtl.groupAssignments[teamIdx] = newGroupIdx;
+            render();
+        }
+        
+        // 경기 순서 변경
+        function moveRTLMatch(matchIdx, direction) {
+            const rtl = window.randomTeamLeague;
+            if (!rtl.matchOrder) {
+                // 초기 경기 순서 생성
+                const totalMatches = rtl.teams.length * (rtl.teams.length - 1) / 2;
+                rtl.matchOrder = [];
+                let matchNum = 0;
+                for (let i = 0; i < rtl.teams.length; i++) {
+                    for (let j = i + 1; j < rtl.teams.length; j++) {
+                        rtl.matchOrder.push({ team1: i, team2: j, order: matchNum++ });
+                    }
+                }
+            }
+            
+            const newIdx = matchIdx + direction;
+            if (newIdx < 0 || newIdx >= rtl.matchOrder.length) return;
+            
+            // 순서 교환
+            const temp = rtl.matchOrder[matchIdx];
+            rtl.matchOrder[matchIdx] = rtl.matchOrder[newIdx];
+            rtl.matchOrder[newIdx] = temp;
+            
+            render();
+        }
+        
         function startRTLLeague() {
             const rtl = window.randomTeamLeague;
             
@@ -7610,7 +8618,7 @@
                     
                     // 순위표
                     html += '<table style="width:100%; font-size:13px; border-collapse:collapse;">';
-                    html += '<tr style="background:#e0e0e0;"><th style="padding:6px;">순위</th><th style="padding:6px; text-align:left;">이름</th>';
+                    html += '<tr style="background:#e0e0e0;"><th style="padding:6px;">순위</th><th style="padding:6px;">이름</th>';
                     html += '<th style="padding:6px;">승</th><th style="padding:6px;">패</th>';
                     html += isTeam ? '<th style="padding:6px;">득점</th><th style="padding:6px;">실점</th>' : '<th style="padding:6px;">세트</th>';
                     html += '<th style="padding:6px;">득실</th></tr>';
@@ -7694,7 +8702,7 @@
                 
                 // 순위표
                 html += `<table style="width:100%; font-size:13px; border-collapse:collapse;">`;
-                html += `<tr style="background:#e0e0e0;"><th style="padding:6px;">순위</th><th style="padding:6px; text-align:left;">이름</th>`;
+                html += `<tr style="background:#e0e0e0;"><th style="padding:6px;">순위</th><th style="padding:6px;">이름</th>`;
                 html += `<th style="padding:6px;">승</th><th style="padding:6px;">패</th>`;
                 html += isTeam ? `<th style="padding:6px;">득점</th><th style="padding:6px;">실점</th>` : `<th style="padding:6px;">세트</th>`;
                 html += `<th style="padding:6px;">득실</th></tr>`;
@@ -8134,17 +9142,25 @@
                 tw.info.name = name;
                 tw.info.date = document.getElementById('tw-date')?.value || '';
                 tw.info.location = document.getElementById('tw-location')?.value.trim() || '';
-                tw.info.rules = document.getElementById('tw-rules')?.value.trim() || '';
-                
-                // 템플릿 모드에서 템플릿 선택 확인
-                if (tw.mode === 'template' && !tw.template) {
-                    alert('대회 형식을 선택해주세요.');
-                    return;
-                }
+                // rules 제거됨
             } else if (tw.step === 2) {
                 if (tw.participants.length < 2) {
                     alert('최소 2명 이상의 참가자가 필요합니다.');
                     return;
+                }
+            } else if (tw.step === 3) {
+                // Step 3 → Step 4 전환 시 본선 규모 초기화
+                const participantCount = tw.participants.length;
+                const finalsCount = tw.preliminary.enabled 
+                    ? (tw.preliminary.groupCount * tw.preliminary.advanceCount + tw.preliminary.wildcards)
+                    : participantCount;
+                
+                // 적절한 본선 규모 자동 설정
+                const possibleSizes = [4, 8, 16, 32, 64].filter(s => s >= finalsCount);
+                if (possibleSizes.length > 0 && !tw.finals.size) {
+                    tw.finals.size = possibleSizes[0]; // 참가자 수에 맞는 최소 규모
+                } else if (!possibleSizes.includes(tw.finals.size)) {
+                    tw.finals.size = possibleSizes[0] || 4;
                 }
             } else if (tw.step === 4) {
                 // 설정 유효성 검사
@@ -8481,16 +9497,6 @@
                 tournamentType = tw.template || 'group-knockout';
             }
             
-            // 대회 규칙 표시
-            if (tw.info.rules) {
-                html += `
-                    <div style="background:#e3f2fd; padding:12px; border-radius:8px; margin-bottom:16px;">
-                        <div style="font-weight:600; margin-bottom:8px;">📋 대회 규칙</div>
-                        <div style="font-size:13px; white-space:pre-wrap;">${tw.info.rules}</div>
-                    </div>
-                `;
-            }
-            
             // 설정 요약
             html += `
                 <div style="background:#f5f5f5; padding:12px; border-radius:8px; margin-bottom:16px;">
@@ -8604,7 +9610,6 @@
                 name: tw.info.name,
                 date: tw.info.date,
                 location: tw.info.location,
-                rules: tw.info.rules || '',
                 competitionType: isTeam ? 'team' : 'individual',
                 players: !isTeam ? tw.participants : [],
                 teams: isTeam ? tw.participants.map(t => ({ name: t, players: [] })) : [],
@@ -8618,7 +9623,6 @@
                 advanceCount: tw.preliminary?.advanceCount || 2,
                 wildcards: tw.preliminary?.wildcards || 0,
                 sameGroupAvoid: tw.finals?.sameGroupAvoid || 'quarterfinal',
-                // ✨ 심판 및 경기장 정보 추가
                 referees: tw.referees || [],
                 courts: tw.courts || [],
                 createdAt: new Date().toISOString()
@@ -8744,11 +9748,783 @@
             // 생성된 프로젝트로 이동
             currentProject = project;
             announce(`${project.name} 대회가 생성되었습니다. ${project.matches.length}경기`);
+            
+            // 경기장이 등록되어 있으면 배정 화면으로 이동 제안
+            if (project.courts && project.courts.length > 0) {
+                if (confirm(`대회가 생성되었습니다!\n\n등록된 경기장: ${project.courts.map(c => c.name).join(', ')}\n\n지금 경기장을 배정하시겠습니까?`)) {
+                    goTo('bracket-assign');
+                    return;
+                }
+            }
+            
             goTo('bracket-detail');
         }
         
         function generatePin() {
             return Math.random().toString().slice(2, 6);
+        }
+        
+        // ========== 관리자/운영자 모드 함수 ==========
+        let adminModeAuth = false;
+        
+        function enterAdminMode() {
+            const operators = JSON.parse(localStorage.getItem('operators') || '[]');
+            
+            if (operators.length === 0) {
+                // 운영자 없음 - 최초 등록 화면으로
+                goTo('operator-setup');
+            } else {
+                // 운영자 있음 - 로그인 화면으로
+                goTo('admin-password');
+            }
+        }
+        
+        // Firebase Auth 로그인
+        async function verifyAdminPin() {
+            const inputEmail = document.getElementById('admin-email')?.value.trim();
+            const inputPassword = document.getElementById('admin-pin')?.value;
+            
+            if (!inputEmail || !inputPassword) {
+                alert('이메일과 비밀번호를 입력하세요.');
+                return;
+            }
+            
+            // 로그인 버튼 비활성화
+            const loginBtn = document.querySelector('#admin-login-btn');
+            if (loginBtn) {
+                loginBtn.disabled = true;
+                loginBtn.textContent = '로그인 중...';
+            }
+            
+            try {
+                if (auth) {
+                    // Firebase Auth 로그인
+                    const userCredential = await auth.signInWithEmailAndPassword(inputEmail, inputPassword);
+                    const user = userCredential.user;
+                    
+                    // 운영자 정보 가져오기
+                    const operators = JSON.parse(localStorage.getItem('operators') || '[]');
+                    const operator = operators.find(op => op.email === inputEmail);
+                    
+                    if (operator) {
+                        adminModeAuth = true;
+                        sessionStorage.setItem('currentOperator', JSON.stringify(operator));
+                        announce(`${operator.name}님, 관리자 모드 진입`);
+                        goTo('admin-home');
+                    } else {
+                        alert('등록된 운영자가 아닙니다.');
+                        await auth.signOut();
+                    }
+                } else {
+                    // 로컬 모드 폴백
+                    const operators = JSON.parse(localStorage.getItem('operators') || '[]');
+                    const operator = operators.find(op => op.email === inputEmail && op.password === inputPassword);
+                    
+                    if (operator) {
+                        adminModeAuth = true;
+                        sessionStorage.setItem('currentOperator', JSON.stringify(operator));
+                        announce(`${operator.name}님, 관리자 모드 진입`);
+                        goTo('admin-home');
+                    } else {
+                        alert('이메일 또는 비밀번호가 일치하지 않습니다.');
+                    }
+                }
+            } catch (error) {
+                console.error('로그인 오류:', error);
+                let errorMsg = '로그인에 실패했습니다.';
+                if (error.code === 'auth/user-not-found') errorMsg = '등록되지 않은 이메일입니다.';
+                else if (error.code === 'auth/wrong-password') errorMsg = '비밀번호가 올바르지 않습니다.';
+                else if (error.code === 'auth/invalid-email') errorMsg = '이메일 형식이 올바르지 않습니다.';
+                else if (error.code === 'auth/too-many-requests') errorMsg = '너무 많은 시도입니다. 잠시 후 다시 시도하세요.';
+                alert(errorMsg);
+            } finally {
+                if (loginBtn) {
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = '로그인';
+                }
+            }
+        }
+        
+        // 비밀번호 찾기 (이메일 발송)
+        async function sendPasswordReset() {
+            const email = document.getElementById('reset-email')?.value.trim();
+            
+            if (!email) {
+                alert('이메일을 입력하세요.');
+                return;
+            }
+            
+            // 이메일이 등록된 운영자인지 확인
+            const operators = JSON.parse(localStorage.getItem('operators') || '[]');
+            const operator = operators.find(op => op.email === email);
+            
+            if (!operator) {
+                alert('등록되지 않은 이메일입니다.');
+                return;
+            }
+            
+            try {
+                if (auth) {
+                    await auth.sendPasswordResetEmail(email);
+                    alert(`✅ 비밀번호 재설정 이메일이 발송되었습니다!\n\n${email}로 발송된 이메일을 확인하세요.`);
+                    goTo('admin-password');
+                } else {
+                    alert('Firebase가 연결되지 않아 이메일을 발송할 수 없습니다.');
+                }
+            } catch (error) {
+                console.error('비밀번호 재설정 오류:', error);
+                let errorMsg = '이메일 발송에 실패했습니다.';
+                if (error.code === 'auth/user-not-found') errorMsg = '등록되지 않은 이메일입니다.';
+                else if (error.code === 'auth/invalid-email') errorMsg = '이메일 형식이 올바르지 않습니다.';
+                alert(errorMsg);
+            }
+        }
+        
+        // 최초 운영자 등록
+        async function setupFirstOperator() {
+            const name = document.getElementById('first-operator-name')?.value.trim();
+            const email = document.getElementById('first-operator-email')?.value.trim();
+            const password = document.getElementById('first-operator-password')?.value;
+            const confirmPassword = document.getElementById('first-operator-confirm')?.value;
+            
+            if (!name) {
+                alert('운영자 이름을 입력하세요.');
+                return;
+            }
+            
+            if (!email) {
+                alert('이메일을 입력하세요.');
+                return;
+            }
+            
+            // 이메일 형식 검증
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                alert('올바른 이메일 형식을 입력하세요.');
+                return;
+            }
+            
+            if (!password || password.length < 6) {
+                alert('비밀번호는 6자 이상이어야 합니다.');
+                return;
+            }
+            
+            if (password !== confirmPassword) {
+                alert('비밀번호가 일치하지 않습니다.');
+                return;
+            }
+            
+            // 등록 버튼 비활성화
+            const registerBtn = document.querySelector('#setup-btn');
+            if (registerBtn) {
+                registerBtn.disabled = true;
+                registerBtn.textContent = '등록 중...';
+            }
+            
+            try {
+                if (auth) {
+                    // Firebase Auth 계정 생성
+                    const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                    const user = userCredential.user;
+                    
+                    // 프로필 업데이트
+                    await user.updateProfile({ displayName: name });
+                }
+                
+                const operators = [{
+                    name: name,
+                    email: email,
+                    password: password, // 로컬 백업용
+                    role: 'super',
+                    createdAt: new Date().toISOString()
+                }];
+                
+                localStorage.setItem('operators', JSON.stringify(operators));
+                sessionStorage.setItem('currentOperator', JSON.stringify(operators[0]));
+                adminModeAuth = true;
+                
+                alert(`${name}님이 최고 관리자로 등록되었습니다!`);
+                goTo('admin-home');
+                
+            } catch (error) {
+                console.error('등록 오류:', error);
+                let errorMsg = '등록에 실패했습니다.';
+                if (error.code === 'auth/email-already-in-use') errorMsg = '이미 사용 중인 이메일입니다.';
+                else if (error.code === 'auth/invalid-email') errorMsg = '이메일 형식이 올바르지 않습니다.';
+                else if (error.code === 'auth/weak-password') errorMsg = '비밀번호가 너무 약합니다. 6자 이상 입력하세요.';
+                alert(errorMsg);
+            } finally {
+                if (registerBtn) {
+                    registerBtn.disabled = false;
+                    registerBtn.textContent = '👑 최고 관리자로 등록';
+                }
+            }
+        }
+        
+        // 운영자 추가 (최고 관리자만)
+        async function addOperator() {
+            const currentOperator = JSON.parse(sessionStorage.getItem('currentOperator') || 'null');
+            if (!currentOperator || currentOperator.role !== 'super') {
+                alert('최고 관리자만 운영자를 추가할 수 있습니다.');
+                return;
+            }
+            
+            const name = document.getElementById('new-operator-name')?.value.trim();
+            const email = document.getElementById('new-operator-email')?.value.trim();
+            const role = document.getElementById('new-operator-role')?.value || 'admin';
+            const password = document.getElementById('new-operator-password')?.value;
+            
+            if (!name) {
+                alert('운영자 이름을 입력하세요.');
+                return;
+            }
+            
+            if (!email) {
+                alert('이메일을 입력하세요.');
+                return;
+            }
+            
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                alert('올바른 이메일 형식을 입력하세요.');
+                return;
+            }
+            
+            if (!password || password.length < 6) {
+                alert('비밀번호는 6자 이상이어야 합니다.');
+                return;
+            }
+            
+            const operators = JSON.parse(localStorage.getItem('operators') || '[]');
+            
+            if (operators.find(op => op.email === email)) {
+                alert('이미 등록된 이메일입니다.');
+                return;
+            }
+            
+            try {
+                if (auth) {
+                    // 현재 사용자 정보 저장
+                    const currentUser = auth.currentUser;
+                    
+                    // 새 운영자 Firebase 계정 생성 (별도 auth 인스턴스 필요)
+                    // 참고: Firebase Admin SDK 없이는 직접 생성이 제한적
+                    // 대안: 초대 이메일 발송
+                    
+                    // 간단한 방법: 운영자가 직접 가입하도록 초대
+                    // 여기서는 로컬에만 저장하고 첫 로그인 시 Firebase 계정 생성 유도
+                }
+                
+                operators.push({
+                    name: name,
+                    email: email,
+                    password: password,
+                    role: role,
+                    createdAt: new Date().toISOString(),
+                    needsFirebaseSetup: true // Firebase 계정 생성 필요 표시
+                });
+                
+                localStorage.setItem('operators', JSON.stringify(operators));
+                alert(`운영자 "${name}" 등록 완료!\n\n이메일: ${email}\n임시 비밀번호: ${password}\n\n첫 로그인 시 비밀번호를 변경하도록 안내해주세요.`);
+                render();
+                
+            } catch (error) {
+                console.error('운영자 추가 오류:', error);
+                alert('운영자 추가에 실패했습니다.');
+            }
+        }
+        
+        // 운영자 삭제
+        function deleteOperator(idx) {
+            const currentOperator = JSON.parse(sessionStorage.getItem('currentOperator') || 'null');
+            if (!currentOperator || currentOperator.role !== 'super') {
+                alert('최고 관리자만 운영자를 삭제할 수 있습니다.');
+                return;
+            }
+            
+            const operators = JSON.parse(localStorage.getItem('operators') || '[]');
+            const targetOp = operators[idx];
+            
+            // 자기 자신은 삭제 불가
+            if (targetOp.name === currentOperator.name) {
+                alert('자기 자신은 삭제할 수 없습니다.');
+                return;
+            }
+            
+            // 마지막 최고 관리자는 삭제 불가
+            if (targetOp.role === 'super' && operators.filter(op => op.role === 'super').length <= 1) {
+                alert('최소 1명의 최고 관리자가 필요합니다.');
+                return;
+            }
+            
+            if (confirm(`"${targetOp.name}" 운영자를 삭제하시겠습니까?`)) {
+                operators.splice(idx, 1);
+                localStorage.setItem('operators', JSON.stringify(operators));
+                announce(`운영자 삭제됨`);
+                render();
+            }
+        }
+        
+        // 운영자 권한 변경
+        function toggleOperatorRole(idx) {
+            const currentOperator = JSON.parse(sessionStorage.getItem('currentOperator') || 'null');
+            if (!currentOperator || currentOperator.role !== 'super') {
+                alert('최고 관리자만 권한을 변경할 수 있습니다.');
+                return;
+            }
+            
+            const operators = JSON.parse(localStorage.getItem('operators') || '[]');
+            const targetOp = operators[idx];
+            
+            const newRole = targetOp.role === 'super' ? 'admin' : 'super';
+            const roleLabel = newRole === 'super' ? '최고 관리자' : '일반 관리자';
+            
+            if (confirm(`"${targetOp.name}"의 권한을 "${roleLabel}"로 변경하시겠습니까?`)) {
+                operators[idx].role = newRole;
+                localStorage.setItem('operators', JSON.stringify(operators));
+                alert(`권한이 "${roleLabel}"로 변경되었습니다.`);
+                render();
+            }
+        }
+        
+        // 내 비밀번호 변경
+        async function changeMyPassword() {
+            const currentOperator = JSON.parse(sessionStorage.getItem('currentOperator') || 'null');
+            if (!currentOperator) {
+                alert('로그인이 필요합니다.');
+                return;
+            }
+            
+            const currentPw = prompt('현재 비밀번호를 입력하세요:');
+            if (!currentPw) return;
+            
+            const newPw = prompt('새 비밀번호를 입력하세요 (6자 이상):');
+            if (!newPw || newPw.length < 6) {
+                alert('비밀번호는 6자 이상이어야 합니다.');
+                return;
+            }
+            
+            const confirmPw = prompt('새 비밀번호를 다시 입력하세요:');
+            if (newPw !== confirmPw) {
+                alert('비밀번호가 일치하지 않습니다.');
+                return;
+            }
+            
+            try {
+                if (auth && auth.currentUser) {
+                    // Firebase Auth 비밀번호 변경
+                    const credential = firebase.auth.EmailAuthProvider.credential(
+                        currentOperator.email,
+                        currentPw
+                    );
+                    
+                    // 재인증
+                    await auth.currentUser.reauthenticateWithCredential(credential);
+                    
+                    // 새 비밀번호로 변경
+                    await auth.currentUser.updatePassword(newPw);
+                }
+                
+                // 로컬 저장소 업데이트
+                const operators = JSON.parse(localStorage.getItem('operators') || '[]');
+                const idx = operators.findIndex(op => op.email === currentOperator.email);
+                
+                if (idx >= 0) {
+                    operators[idx].password = newPw;
+                    localStorage.setItem('operators', JSON.stringify(operators));
+                    
+                    currentOperator.password = newPw;
+                    sessionStorage.setItem('currentOperator', JSON.stringify(currentOperator));
+                }
+                
+                alert('✅ 비밀번호가 변경되었습니다.');
+                
+            } catch (error) {
+                console.error('비밀번호 변경 오류:', error);
+                let errorMsg = '비밀번호 변경에 실패했습니다.';
+                if (error.code === 'auth/wrong-password') errorMsg = '현재 비밀번호가 올바르지 않습니다.';
+                else if (error.code === 'auth/weak-password') errorMsg = '새 비밀번호가 너무 약합니다.';
+                alert(errorMsg);
+            }
+        }
+        
+        // 다른 운영자 비밀번호 초기화 (최고관리자 기능)
+        async function resetOperatorPassword(idx) {
+            const currentOperator = JSON.parse(sessionStorage.getItem('currentOperator') || 'null');
+            if (!currentOperator || currentOperator.role !== 'super') {
+                alert('최고 관리자만 비밀번호를 초기화할 수 있습니다.');
+                return;
+            }
+            
+            const operators = JSON.parse(localStorage.getItem('operators') || '[]');
+            const targetOp = operators[idx];
+            
+            if (!targetOp) return;
+            
+            if (confirm(`"${targetOp.name}" 운영자에게 비밀번호 재설정 이메일을 발송하시겠습니까?`)) {
+                try {
+                    if (auth) {
+                        await auth.sendPasswordResetEmail(targetOp.email);
+                        alert(`✅ 비밀번호 재설정 이메일이 ${targetOp.email}로 발송되었습니다.`);
+                    } else {
+                        // 로컬 모드: 임시 비밀번호 발급
+                        const tempPw = Math.random().toString(36).slice(-8);
+                        operators[idx].password = tempPw;
+                        localStorage.setItem('operators', JSON.stringify(operators));
+                        alert(`임시 비밀번호: ${tempPw}\n\n운영자에게 직접 전달해주세요.`);
+                    }
+                } catch (error) {
+                    console.error('비밀번호 초기화 오류:', error);
+                    alert('비밀번호 초기화에 실패했습니다.');
+                }
+            }
+        }
+        
+        // 대회 데이터만 초기화
+        function resetTournamentData() {
+            if (prompt('대회 데이터를 초기화하시겠습니까?\n\n확인하려면 "초기화"를 입력하세요:') === '초기화') {
+                projects = [];
+                saveProjects();
+                localStorage.removeItem('practiceHistory');
+                alert('대회 데이터가 초기화되었습니다.\n(운영자, 심판, 경기장 정보는 유지됩니다)');
+                render();
+            }
+        }
+        
+        // 운영자 초기화
+        function resetOperators() {
+            if (prompt('운영자 정보를 초기화하시겠습니까?\n재설정 화면으로 이동합니다.\n\n확인하려면 "재설정"을 입력하세요:') === '재설정') {
+                localStorage.removeItem('operators');
+                sessionStorage.removeItem('currentOperator');
+                adminModeAuth = false;
+                alert('운영자 정보가 초기화되었습니다.\n최초 운영자 등록 화면으로 이동합니다.');
+                goTo('operator-setup');
+            }
+        }
+        
+        // 공장 초기화
+        function factoryReset() {
+            if (prompt('모든 데이터를 삭제하고 초기 상태로 되돌리시겠습니까?\n\n⚠️ 이 작업은 되돌릴 수 없습니다!\n\n확인하려면 "공장초기화"를 입력하세요:') === '공장초기화') {
+                localStorage.clear();
+                sessionStorage.clear();
+                projects = [];
+                alert('공장 초기화 완료!\n앱이 재시작됩니다.');
+                location.reload();
+            }
+        }
+        
+        // 관리자 로그아웃
+        function adminLogout() {
+            sessionStorage.removeItem('currentOperator');
+            adminModeAuth = false;
+            announce('로그아웃 되었습니다.');
+            goTo('home');
+        }
+        
+        // 전역 심판 관리
+        function addGlobalReferee() {
+            const name = document.getElementById('new-referee-name')?.value.trim();
+            const role = document.getElementById('new-referee-role')?.value || '심판';
+            
+            if (!name) {
+                alert('심판 이름을 입력하세요.');
+                return;
+            }
+            
+            const globalReferees = JSON.parse(localStorage.getItem('globalReferees') || '[]');
+            
+            if (globalReferees.find(r => r.name === name)) {
+                alert('이미 등록된 심판입니다.');
+                return;
+            }
+            
+            const pin = Math.random().toString().slice(2, 6);
+            globalReferees.push({ name, role, pin, createdAt: new Date().toISOString() });
+            localStorage.setItem('globalReferees', JSON.stringify(globalReferees));
+            
+            announce(`심판 "${name}" 등록 완료. PIN: ${pin}`);
+            alert(`심판 "${name}" 등록 완료!\nPIN: ${pin}`);
+            render();
+        }
+        
+        function deleteGlobalReferee(idx) {
+            const globalReferees = JSON.parse(localStorage.getItem('globalReferees') || '[]');
+            const ref = globalReferees[idx];
+            
+            if (confirm(`"${ref.name}" 심판을 삭제하시겠습니까?`)) {
+                globalReferees.splice(idx, 1);
+                localStorage.setItem('globalReferees', JSON.stringify(globalReferees));
+                announce(`심판 "${ref.name}" 삭제됨`);
+                render();
+            }
+        }
+        
+        function regenerateRefereePin(idx) {
+            const globalReferees = JSON.parse(localStorage.getItem('globalReferees') || '[]');
+            const ref = globalReferees[idx];
+            const newPin = Math.random().toString().slice(2, 6);
+            
+            if (confirm(`"${ref.name}" 심판의 PIN을 재발급하시겠습니까?`)) {
+                globalReferees[idx].pin = newPin;
+                localStorage.setItem('globalReferees', JSON.stringify(globalReferees));
+                alert(`새 PIN: ${newPin}`);
+                render();
+            }
+        }
+        
+        function showAllPins() {
+            const globalReferees = JSON.parse(localStorage.getItem('globalReferees') || '[]');
+            
+            if (globalReferees.length === 0) {
+                alert('등록된 심판이 없습니다.');
+                return;
+            }
+            
+            const pinList = globalReferees.map(r => `${r.name} (${r.role}): ${r.pin}`).join('\n');
+            alert(`📋 심판 PIN 목록\n\n${pinList}`);
+        }
+        
+        // 전역 경기장 관리
+        function addGlobalCourt() {
+            const name = document.getElementById('new-court-name')?.value.trim();
+            const location = document.getElementById('new-court-location')?.value.trim() || '';
+            
+            if (!name) {
+                alert('경기장 이름을 입력하세요.');
+                return;
+            }
+            
+            const globalCourts = JSON.parse(localStorage.getItem('globalCourts') || '[]');
+            
+            if (globalCourts.find(c => c.name === name)) {
+                alert('이미 등록된 경기장입니다.');
+                return;
+            }
+            
+            globalCourts.push({ name, location, createdAt: new Date().toISOString() });
+            localStorage.setItem('globalCourts', JSON.stringify(globalCourts));
+            
+            announce(`경기장 "${name}" 등록 완료`);
+            render();
+        }
+        
+        function deleteGlobalCourt(idx) {
+            const globalCourts = JSON.parse(localStorage.getItem('globalCourts') || '[]');
+            const court = globalCourts[idx];
+            
+            if (confirm(`"${court.name}" 경기장을 삭제하시겠습니까?`)) {
+                globalCourts.splice(idx, 1);
+                localStorage.setItem('globalCourts', JSON.stringify(globalCourts));
+                announce(`경기장 "${court.name}" 삭제됨`);
+                render();
+            }
+        }
+        
+        // ========== 대회별 경기장/심판 관리 ==========
+        function addTournamentCourt() {
+            if (!currentProject) return;
+            
+            const name = document.getElementById('tournament-court-name')?.value.trim();
+            if (!name) {
+                alert('경기장 이름을 입력하세요.');
+                return;
+            }
+            
+            if (!currentProject.courts) currentProject.courts = [];
+            
+            if (currentProject.courts.find(c => c.name === name)) {
+                alert('이미 등록된 경기장입니다.');
+                return;
+            }
+            
+            currentProject.courts.push({ name });
+            saveProjects();
+            announce(`경기장 "${name}" 등록 완료`);
+            render();
+        }
+        
+        function deleteTournamentCourt(idx) {
+            if (!currentProject || !currentProject.courts) return;
+            
+            const court = currentProject.courts[idx];
+            if (confirm(`"${court.name}" 경기장을 삭제하시겠습니까?`)) {
+                currentProject.courts.splice(idx, 1);
+                saveProjects();
+                announce(`경기장 삭제됨`);
+                render();
+            }
+        }
+        
+        function importGlobalCourt() {
+            if (!currentProject) return;
+            
+            const courtName = document.getElementById('import-global-court')?.value;
+            if (!courtName) {
+                alert('경기장을 선택하세요.');
+                return;
+            }
+            
+            if (!currentProject.courts) currentProject.courts = [];
+            currentProject.courts.push({ name: courtName });
+            saveProjects();
+            announce(`경기장 "${courtName}" 가져오기 완료`);
+            render();
+        }
+        
+        function addTournamentReferee() {
+            if (!currentProject) return;
+            
+            const name = document.getElementById('tournament-referee-name')?.value.trim();
+            const role = document.getElementById('tournament-referee-role')?.value || '심판';
+            
+            if (!name) {
+                alert('심판 이름을 입력하세요.');
+                return;
+            }
+            
+            if (!currentProject.referees) currentProject.referees = [];
+            
+            if (currentProject.referees.find(r => r.name === name)) {
+                alert('이미 등록된 심판입니다.');
+                return;
+            }
+            
+            const pin = Math.random().toString().slice(2, 6);
+            currentProject.referees.push({ name, role, pin });
+            saveProjects();
+            
+            alert(`심판 "${name}" 등록 완료!\nPIN: ${pin}`);
+            render();
+        }
+        
+        function deleteTournamentReferee(idx) {
+            if (!currentProject || !currentProject.referees) return;
+            
+            const ref = currentProject.referees[idx];
+            if (confirm(`"${ref.name}" 심판을 삭제하시겠습니까?`)) {
+                currentProject.referees.splice(idx, 1);
+                saveProjects();
+                announce(`심판 삭제됨`);
+                render();
+            }
+        }
+        
+        function importGlobalReferee() {
+            if (!currentProject) return;
+            
+            const refName = document.getElementById('import-global-referee')?.value;
+            if (!refName) {
+                alert('심판을 선택하세요.');
+                return;
+            }
+            
+            const globalReferees = JSON.parse(localStorage.getItem('globalReferees') || '[]');
+            const globalRef = globalReferees.find(r => r.name === refName);
+            
+            if (!globalRef) {
+                alert('심판을 찾을 수 없습니다.');
+                return;
+            }
+            
+            if (!currentProject.referees) currentProject.referees = [];
+            currentProject.referees.push({ ...globalRef });
+            saveProjects();
+            announce(`심판 "${refName}" 가져오기 완료`);
+            render();
+        }
+        
+        // 관리자 비밀번호 변경
+        function changeAdminPassword() {
+            const currentPw = prompt('현재 비밀번호를 입력하세요:');
+            if (currentPw !== localStorage.getItem('bracketPin')) {
+                alert('비밀번호가 일치하지 않습니다.');
+                return;
+            }
+            
+            const newPw = prompt('새 비밀번호를 입력하세요:');
+            if (!newPw || newPw.length < 4) {
+                alert('비밀번호는 4자 이상이어야 합니다.');
+                return;
+            }
+            
+            const confirmPw = prompt('새 비밀번호를 다시 입력하세요:');
+            if (newPw !== confirmPw) {
+                alert('비밀번호가 일치하지 않습니다.');
+                return;
+            }
+            
+            localStorage.setItem('bracketPin', newPw);
+            alert('비밀번호가 변경되었습니다.');
+        }
+        
+        // 데이터 관리
+        function exportAllData() {
+            const data = {
+                projects: projects,
+                globalReferees: JSON.parse(localStorage.getItem('globalReferees') || '[]'),
+                globalCourts: JSON.parse(localStorage.getItem('globalCourts') || '[]'),
+                practiceHistory: JSON.parse(localStorage.getItem('practiceHistory') || '[]'),
+                exportedAt: new Date().toISOString()
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `showdown-backup-${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            announce('데이터 내보내기 완료');
+        }
+        
+        function importDataPrompt() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        if (confirm(`데이터를 가져오시겠습니까?\n\n프로젝트: ${data.projects?.length || 0}개\n심판: ${data.globalReferees?.length || 0}명\n경기장: ${data.globalCourts?.length || 0}개`)) {
+                            if (data.projects) {
+                                projects = data.projects;
+                                saveProjects();
+                            }
+                            if (data.globalReferees) localStorage.setItem('globalReferees', JSON.stringify(data.globalReferees));
+                            if (data.globalCourts) localStorage.setItem('globalCourts', JSON.stringify(data.globalCourts));
+                            if (data.practiceHistory) localStorage.setItem('practiceHistory', JSON.stringify(data.practiceHistory));
+                            
+                            alert('데이터 가져오기 완료!');
+                            render();
+                        }
+                    } catch (err) {
+                        alert('파일 형식이 올바르지 않습니다.');
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+        
+        function clearAllDataConfirm() {
+            if (prompt('모든 데이터를 삭제하시겠습니까?\n\n확인하려면 "삭제"를 입력하세요:') === '삭제') {
+                localStorage.clear();
+                projects = [];
+                alert('모든 데이터가 삭제되었습니다.');
+                location.reload();
+            }
+        }
+        
+        // 심판용 프로젝트 열기
+        function openRefereeProject(index) {
+            currentProject = projects[index];
+            userRole = 'referee';
+            goTo('project-detail');
         }
         
         // ========== 대진 설정 모드 함수 ==========
@@ -8839,16 +10615,7 @@
             goTo('bracket-home');
         }
         
-        // ========== 심판 비밀번호 관리 ==========
-        function logout() {
-            sessionStorage.removeItem('refereePin');
-            sessionStorage.removeItem('refereeAuth');
-            isAuthenticated = false;
-            userRole = null;
-            announce('로그아웃되었습니다');
-            goTo('home');
-        }
-        
+        // ========== 심판 비밀번호 인증 ==========
         function verifyRefereePassword() {
             const pin = document.getElementById('referee-pin')?.value;
             const password = document.getElementById('referee-password')?.value;
@@ -8941,39 +10708,6 @@
             delete refPasswords[pin];
             localStorage.setItem('refereePasswords', JSON.stringify(refPasswords));
             announce(`✅ ${pin} 심판이 삭제되었습니다`);
-        }
-        
-        // 심판 비밀번호 변경 (심판 자신)
-        function changeRefereePassword() {
-            const pin = sessionStorage.getItem('refereePin');
-            const currentPassword = prompt('현재 비밀번호를 입력하세요:');
-            if (!currentPassword) return;
-            
-            const refPasswords = JSON.parse(localStorage.getItem('refereePasswords') || '{}');
-            
-            if (refPasswords[pin] !== currentPassword) {
-                alert('현재 비밀번호가 일치하지 않습니다');
-                return;
-            }
-            
-            const newPassword = prompt('새 비밀번호를 입력하세요:\n(8자 이상, 대소문자+숫자+특수문자)');
-            if (!newPassword) return;
-            
-            const error = validatePassword(newPassword);
-            if (error) {
-                alert(error);
-                return;
-            }
-            
-            const confirmPassword = prompt('비밀번호를 다시 입력하세요:');
-            if (confirmPassword !== newPassword) {
-                alert('비밀번호가 일치하지 않습니다');
-                return;
-            }
-            
-            refPasswords[pin] = newPassword;
-            localStorage.setItem('refereePasswords', JSON.stringify(refPasswords));
-            announce('✅ 비밀번호가 변경되었습니다');
         }
         
         // ========== 선수 일정 조회 함수 ==========
@@ -9839,6 +11573,50 @@
             saveProjects(); // 즉시 저장
             render(); // 화면 업데이트
         }
+        
+        // 경기장 배정 모드 설정
+        function setCourtAssignMode(mode) {
+            if (!currentProject) return;
+            currentProject.courtAssignMode = mode;
+            saveProjects();
+            render();
+        }
+        
+        // 고정 경기장 설정
+        function setFixedCourt(courtName) {
+            if (!currentProject) return;
+            currentProject.fixedCourt = courtName;
+            saveProjects();
+            render();
+        }
+        
+        // 모든 경기에 고정 경기장 적용
+        function applyFixedCourt() {
+            if (!currentProject || !currentProject.fixedCourt) return;
+            const courtName = currentProject.fixedCourt;
+            
+            currentProject.matches.forEach(m => {
+                m.courtName = courtName;
+            });
+            
+            saveProjects();
+            announce(`✅ 모든 경기를 "${courtName}"에 배정했습니다`);
+            render();
+        }
+        
+        // 경기장 자동 순환 배정
+        function applyRotateCourt() {
+            if (!currentProject || !currentProject.courts || currentProject.courts.length === 0) return;
+            
+            const courts = currentProject.courts;
+            currentProject.matches.forEach((m, idx) => {
+                m.courtName = courts[idx % courts.length].name;
+            });
+            
+            saveProjects();
+            announce(`✅ ${courts.length}개 경기장에 순환 배정 완료`);
+            render();
+        }
 
         // 경기 기록 순서 토글
         let historyOrderDesc = true; // true: 최신순, false: 오래된순
@@ -9992,6 +11770,7 @@
             const sets = type === 'team' ? 1 : parseInt(document.getElementById('practice-sets').value);
             const player1 = document.getElementById('practice-player1').value.trim() || '선수 A';
             const player2 = document.getElementById('practice-player2').value.trim() || '선수 B';
+            const shareEnabled = document.getElementById('practice-share')?.checked ?? true;
             
             // 연습용 프로젝트 생성 (Firebase 동기화됨)
             const practiceProject = {
@@ -10001,7 +11780,8 @@
                 location: '연습',
                 competitionType: type === 'team' ? 'team' : 'individual',
                 matches: [],
-                isPractice: true // 연습 모드 표시
+                isPractice: true,
+                isShared: shareEnabled // 실시간 공유 여부
             };
             
             // 연습 경기 생성
@@ -10023,7 +11803,9 @@
                 history: [],
                 warmupUsed: false,
                 status: 'in-progress',
-                isPractice: true
+                isPractice: true,
+                isShared: shareEnabled,
+                startedAt: new Date().toISOString()
             };
             
             practiceProject.matches.push(practiceMatch);
@@ -10031,6 +11813,15 @@
             // 프로젝트 저장 (Firebase 동기화)
             projects.push(practiceProject);
             saveProjects();
+            
+            // 실시간 공유 활성화 시 Firebase에 별도 저장
+            if (shareEnabled && database) {
+                database.ref('liveMatches/' + practiceMatch.id).set({
+                    ...practiceMatch,
+                    projectName: practiceProject.name,
+                    updatedAt: new Date().toISOString()
+                });
+            }
             
             // 현재 프로젝트/경기 설정
             currentProject = practiceProject;
@@ -10044,6 +11835,48 @@
         }
         
         // 연습 경기 기록 저장 (Firebase + 로컬)
+        // 실시간 연습 경기 관람
+        function watchLiveMatch(matchId) {
+            // 프로젝트에서 경기 찾기
+            for (const project of projects) {
+                const match = project.matches?.find(m => m.id === matchId);
+                if (match) {
+                    currentProject = project;
+                    currentMatch = match;
+                    isAuthenticated = false; // 관람 모드
+                    userRole = 'viewer';
+                    
+                    // Firebase 실시간 리스너 설정
+                    if (database && match.isShared) {
+                        database.ref('liveMatches/' + matchId).on('value', (snapshot) => {
+                            const liveData = snapshot.val();
+                            if (liveData && currentMatch && currentMatch.id === matchId) {
+                                // 실시간 데이터로 경기 상태 업데이트
+                                Object.assign(currentMatch, liveData);
+                                render();
+                            }
+                        });
+                    }
+                    
+                    screen = 'match';
+                    announce(`${match.player1Name} 대 ${match.player2Name} 경기 관람 시작`);
+                    render();
+                    return;
+                }
+            }
+            alert('경기를 찾을 수 없습니다.');
+        }
+        
+        // 실시간 경기 데이터 업데이트 (점수 변경 시 호출)
+        function updateLiveMatch() {
+            if (!currentMatch || !currentMatch.isShared || !database) return;
+            
+            database.ref('liveMatches/' + currentMatch.id).update({
+                ...currentMatch,
+                updatedAt: new Date().toISOString()
+            });
+        }
+        
         function savePracticeResult(silent = false) {
             if (!currentMatch) return;
             
@@ -10249,6 +12082,13 @@
         const currentTheme = themes[currentThemeIndex];
         document.getElementById('theme-btn').textContent = `모드: ${currentTheme.name}`;
         document.getElementById('voice-btn').style.opacity = voiceEnabled ? '1' : '0.5';
+        
+        // 심판 비밀번호 초기화 (첫 실행 시)
+        if (!localStorage.getItem('refereePasswordsInitialized')) {
+            localStorage.setItem('refereePasswords', JSON.stringify({}));
+            localStorage.setItem('refereePasswordsInitialized', 'true');
+        }
+        
         render();
         
         // PWA Service Worker 등록
@@ -10378,8 +12218,6 @@
             announce(`✅ 경기장 "${court.name}" 삭제됨`);
             render();
         }
-        
-    </script>
         
         // ✨ Firebase 기반 사용자 설정
         let favoritePlayers = [];
