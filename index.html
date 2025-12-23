@@ -9779,7 +9779,7 @@
             }
         }
         
-        // Firebase Auth 로그인
+        // Firebase Auth 로그인 (로컬 폴백 지원)
         async function verifyAdminPin() {
             const inputEmail = document.getElementById('admin-email')?.value.trim();
             const inputPassword = document.getElementById('admin-pin')?.value;
@@ -9796,48 +9796,46 @@
                 loginBtn.textContent = '로그인 중...';
             }
             
-            try {
-                if (auth) {
-                    // Firebase Auth 로그인
-                    const userCredential = await auth.signInWithEmailAndPassword(inputEmail, inputPassword);
-                    const user = userCredential.user;
-                    
-                    // 운영자 정보 가져오기
-                    const operators = JSON.parse(localStorage.getItem('operators') || '[]');
-                    const operator = operators.find(op => op.email === inputEmail);
-                    
-                    if (operator) {
-                        adminModeAuth = true;
-                        sessionStorage.setItem('currentOperator', JSON.stringify(operator));
-                        announce(`${operator.name}님, 관리자 모드 진입`);
-                        goTo('admin-home');
-                    } else {
-                        alert('등록된 운영자가 아닙니다.');
-                        await auth.signOut();
-                    }
-                } else {
-                    // 로컬 모드 폴백
-                    const operators = JSON.parse(localStorage.getItem('operators') || '[]');
-                    const operator = operators.find(op => op.email === inputEmail && op.password === inputPassword);
-                    
-                    if (operator) {
-                        adminModeAuth = true;
-                        sessionStorage.setItem('currentOperator', JSON.stringify(operator));
-                        announce(`${operator.name}님, 관리자 모드 진입`);
-                        goTo('admin-home');
-                    } else {
-                        alert('이메일 또는 비밀번호가 일치하지 않습니다.');
-                    }
+            // 먼저 로컬에서 운영자 확인
+            const operators = JSON.parse(localStorage.getItem('operators') || '[]');
+            const operator = operators.find(op => op.email === inputEmail);
+            
+            if (!operator) {
+                alert('등록되지 않은 이메일입니다.');
+                if (loginBtn) {
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = '로그인';
                 }
-            } catch (error) {
-                console.error('로그인 오류:', error);
-                let errorMsg = '로그인에 실패했습니다.';
-                if (error.code === 'auth/user-not-found') errorMsg = '등록되지 않은 이메일입니다.';
-                else if (error.code === 'auth/wrong-password') errorMsg = '비밀번호가 올바르지 않습니다.';
-                else if (error.code === 'auth/invalid-email') errorMsg = '이메일 형식이 올바르지 않습니다.';
-                else if (error.code === 'auth/too-many-requests') errorMsg = '너무 많은 시도입니다. 잠시 후 다시 시도하세요.';
-                alert(errorMsg);
-            } finally {
+                return;
+            }
+            
+            // Firebase Auth 시도
+            let firebaseSuccess = false;
+            if (auth && operator.firebaseAuth) {
+                try {
+                    await auth.signInWithEmailAndPassword(inputEmail, inputPassword);
+                    firebaseSuccess = true;
+                    console.log('✅ Firebase 로그인 성공');
+                } catch (error) {
+                    console.warn('Firebase 로그인 실패, 로컬 모드 시도:', error.code);
+                    // Firebase 실패 시 로컬 비밀번호로 확인
+                }
+            }
+            
+            // Firebase 성공 또는 로컬 비밀번호 일치 시 로그인
+            if (firebaseSuccess || operator.password === inputPassword) {
+                adminModeAuth = true;
+                sessionStorage.setItem('currentOperator', JSON.stringify(operator));
+                announce(`${operator.name}님, 관리자 모드 진입`);
+                
+                if (loginBtn) {
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = '로그인';
+                }
+                
+                goTo('admin-home');
+            } else {
+                alert('비밀번호가 올바르지 않습니다.');
                 if (loginBtn) {
                     loginBtn.disabled = false;
                     loginBtn.textContent = '로그인';
@@ -9921,44 +9919,48 @@
                 registerBtn.textContent = '등록 중...';
             }
             
-            try {
-                if (auth) {
-                    // Firebase Auth 계정 생성
+            let firebaseSuccess = false;
+            
+            // Firebase Auth 시도 (실패해도 로컬 모드로 계속 진행)
+            if (auth) {
+                try {
                     const userCredential = await auth.createUserWithEmailAndPassword(email, password);
                     const user = userCredential.user;
-                    
-                    // 프로필 업데이트
                     await user.updateProfile({ displayName: name });
-                }
-                
-                const operators = [{
-                    name: name,
-                    email: email,
-                    password: password, // 로컬 백업용
-                    role: 'super',
-                    createdAt: new Date().toISOString()
-                }];
-                
-                localStorage.setItem('operators', JSON.stringify(operators));
-                sessionStorage.setItem('currentOperator', JSON.stringify(operators[0]));
-                adminModeAuth = true;
-                
-                alert(`${name}님이 최고 관리자로 등록되었습니다!`);
-                goTo('admin-home');
-                
-            } catch (error) {
-                console.error('등록 오류:', error);
-                let errorMsg = '등록에 실패했습니다.';
-                if (error.code === 'auth/email-already-in-use') errorMsg = '이미 사용 중인 이메일입니다.';
-                else if (error.code === 'auth/invalid-email') errorMsg = '이메일 형식이 올바르지 않습니다.';
-                else if (error.code === 'auth/weak-password') errorMsg = '비밀번호가 너무 약합니다. 6자 이상 입력하세요.';
-                alert(errorMsg);
-            } finally {
-                if (registerBtn) {
-                    registerBtn.disabled = false;
-                    registerBtn.textContent = '👑 최고 관리자로 등록';
+                    firebaseSuccess = true;
+                    console.log('✅ Firebase Auth 등록 성공');
+                } catch (error) {
+                    console.warn('Firebase Auth 실패, 로컬 모드로 전환:', error.code, error.message);
+                    // Firebase 실패해도 로컬 모드로 계속 진행
                 }
             }
+            
+            // 로컬에 저장 (Firebase 성공/실패 관계없이)
+            const operators = [{
+                name: name,
+                email: email,
+                password: password,
+                role: 'super',
+                firebaseAuth: firebaseSuccess,
+                createdAt: new Date().toISOString()
+            }];
+            
+            localStorage.setItem('operators', JSON.stringify(operators));
+            sessionStorage.setItem('currentOperator', JSON.stringify(operators[0]));
+            adminModeAuth = true;
+            
+            if (firebaseSuccess) {
+                alert(`✅ ${name}님이 최고 관리자로 등록되었습니다!\n\n(Firebase 인증 활성화됨 - 비밀번호 찾기 가능)`);
+            } else {
+                alert(`✅ ${name}님이 최고 관리자로 등록되었습니다!\n\n⚠️ 로컬 모드로 등록됨\n(비밀번호 찾기 기능 제한)`);
+            }
+            
+            if (registerBtn) {
+                registerBtn.disabled = false;
+                registerBtn.textContent = '👑 최고 관리자로 등록';
+            }
+            
+            goTo('admin-home');
         }
         
         // 운영자 추가 (최고 관리자만)
