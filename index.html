@@ -9,36 +9,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="쇼다운">
     
-    <!-- 🔢 앱 버전 (자동 생성됨 - 수정 불필요!) -->
-    <meta name="app-version" content="auto">
-    
-    <script>
-        // 🔄 자동 버전 생성 시스템 (HTML 내용 기반)
-        (function() {
-            // HTML 전체 내용에서 간단한 해시 생성
-            function simpleHash(str) {
-                let hash = 0;
-                for (let i = 0; i < str.length; i++) {
-                    const char = str.charCodeAt(i);
-                    hash = ((hash << 5) - hash) + char;
-                    hash = hash & hash; // Convert to 32bit integer
-                }
-                return Math.abs(hash).toString(36).substring(0, 8);
-            }
-            
-            // 현재 HTML 내용으로 버전 생성
-            const htmlContent = document.documentElement.outerHTML;
-            const contentHash = simpleHash(htmlContent);
-            const timestamp = Date.now().toString(36);
-            const version = `${timestamp}-${contentHash}`;
-            
-            // meta 태그 업데이트
-            document.querySelector('meta[name="app-version"]').content = version;
-            
-            console.log('📌 자동 생성된 버전:', version);
-            console.log('💡 HTML이 변경되면 자동으로 새 버전 생성됨');
-        })();
-    </script>
+    <!-- 🔢 앱 버전 (업데이트 시 이 숫자만 증가시키세요!) -->
+    <meta name="app-version" content="2.1.1">
     
     <title>쇼다운 심판 앱 PRO</title>
     
