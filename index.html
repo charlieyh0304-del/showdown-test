@@ -14,17 +14,27 @@
     
     <title>쇼다운 심판 앱 PRO</title>
     
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="manifest.json">
+    <!-- 🔍 모바일 디버거 (URL에 ?debug 추가 시 활성화) -->
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>
+        // URL에 ?debug 또는 ?eruda가 있으면 디버거 활성화
+        if (window.location.search.includes('debug') || window.location.search.includes('eruda')) {
+            eruda.init();
+            console.log('🔍 Eruda 모바일 디버거 활성화됨');
+        }
+    </script>
     
-    <!-- Apple Touch Icons -->
-    <link rel="apple-touch-icon" href="icons/icon-152.png">
+    <!-- PWA Manifest - 인라인 처리 (404 방지) -->
+    <!-- <link rel="manifest" href="manifest.json"> -->
+    
+    <!-- Apple Touch Icons - 주석 처리 (404 방지) -->
+    <!-- <link rel="apple-touch-icon" href="icons/icon-152.png">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-192.png">
-    <link rel="apple-touch-icon" sizes="167x167" href="icons/icon-152.png">
+    <link rel="apple-touch-icon" sizes="167x167" href="icons/icon-152.png"> -->
     
-    <!-- Favicon -->
-    <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-72.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="icons/icon-72.png">
+    <!-- Favicon - 주석 처리 (404 방지) -->
+    <!-- <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-72.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/icon-72.png"> -->
     
     <!-- Splash Screen for iOS -->
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -986,6 +996,12 @@
         document.addEventListener('DOMContentLoaded', function() {
             console.log('🚀 앱 초기화 시작...');
             
+            // ✨ screen 강제 초기화 (모바일 문제 방지)
+            if (!window.location.search.includes('project=') && !window.location.search.includes('match=')) {
+                screen = 'home';
+                console.log('🏠 screen 강제 초기화: home');
+            }
+            
             // 1. 기본 UI 즉시 표시 (로딩 상태)
             const app = document.getElementById('app');
             if (app) {
@@ -1027,6 +1043,8 @@
             } catch (e) {
                 console.error('❌ 연습 경기 상태 복원 실패:', e);
                 sessionStorage.removeItem('practiceState');
+                // 실패 시 홈으로
+                screen = 'home';
             }
             
             // 3. Firebase 및 데이터 로드 실행
@@ -1035,9 +1053,11 @@
             } else {
                 // Firebase 없을 경우 즉시 렌더링
                 console.log('📍 Firebase 없음 - 즉시 렌더링');
+                screen = 'home'; // 확실하게 홈으로
                 if (typeof render === 'function') {
                     render();
                 }
+            }
             }
         });
         
@@ -1255,6 +1275,11 @@
                         projects = [];
                         localStorage.removeItem('projects'); // 손상된 데이터 제거
                     }
+                    // ✨ screen 확인 및 기본값 설정
+                    if (!screen || screen === '') {
+                        screen = 'home';
+                        console.log('🏠 screen 기본값 설정: home');
+                    }
                     checkUrlProjectParam();
                     render();
                     return;
@@ -1271,7 +1296,7 @@
                         localStorage.setItem('projects', JSON.stringify(projects));
                         console.log('💾 로컬 스토리지 백업 완료');
                     } catch (e) {
-                        console.warn(⚠️ 로컬 스토리지 저장 실패:', e);
+                        console.warn('⚠️ 로컬 스토리지 저장 실패:', e);
                     }
                     
                     console.log(`✅ 데이터 로드 성공: ${projects.length}개 프로젝트`);
@@ -1279,6 +1304,11 @@
                     // 첫 로드시 URL 파라미터 확인 및 강제 렌더링
                     if (isFirstLoad) {
                         isFirstLoad = false;
+                        // ✨ screen 확인 및 기본값 설정
+                        if (!screen || screen === '') {
+                            screen = 'home';
+                            console.log('🏠 screen 기본값 설정: home');
+                        }
                         checkUrlProjectParam();
                         render();
                         return;
@@ -1562,6 +1592,14 @@
         ];
 
         function render() {
+            // ✨ screen 값 검증 및 기본값 설정 (모바일 문제 방지)
+            if (!screen || screen === '' || typeof screen !== 'string') {
+                console.warn('⚠️ screen 값 오류 감지:', screen, '→ home으로 변경');
+                screen = 'home';
+            }
+            
+            console.log('🎬 render() 실행: screen =', screen);
+            
             // 현재 포커스된 요소의 ID 저장
             const focusedId = document.activeElement?.id;
             const focusedValue = document.activeElement?.value;
@@ -1570,6 +1608,12 @@
             const savedScrollPos = (screen === 'tournament-wizard' || screen === 'random-team-league') ? window.scrollY : 0;
             
             const app = document.getElementById('app');
+            
+            // ✨ app 요소 확인
+            if (!app) {
+                console.error('❌ app 요소를 찾을 수 없습니다!');
+                return;
+            }
             
             // 페이지 타이틀 설정
             const pageTitles = {
@@ -1611,6 +1655,7 @@
                 '<div role="alert" style="background:#ff9800; color:white; padding:8px 16px; text-align:center; font-size:14px; margin-bottom:16px; border-radius:8px;">오프라인 모드 - 데이터가 로컬에 저장됩니다</div>' : '';
             
             if (screen === 'home') {
+                console.log('✅ 홈 화면 렌더링 중...');
                 // 앱 버전 표시
                 const appVersion = document.querySelector('meta[name="app-version"]')?.content || '2.1.0';
                 
@@ -1691,6 +1736,31 @@
                 const practiceHistory = JSON.parse(localStorage.getItem('practiceHistory') || '[]');
                 const recentCount = practiceHistory.length;
                 
+                // ✨ 진행 중인 연습 경기 확인
+                let inProgressPractice = null;
+                try {
+                    const savedState = sessionStorage.getItem('practiceState');
+                    if (savedState) {
+                        const state = JSON.parse(savedState);
+                        if (state.isPractice && state.screen === 'match') {
+                            // 프로젝트에서 경기 찾기
+                            const project = projects.find(p => p.id === state.projectId);
+                            if (project) {
+                                const match = project.matches?.find(m => m.id === state.matchId);
+                                if (match && match.status === 'in-progress') {
+                                    inProgressPractice = {
+                                        project: project,
+                                        match: match,
+                                        state: state
+                                    };
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('진행 중인 연습 경기 확인 실패:', e);
+                }
+                
                 app.innerHTML = `
                     <div class="header" style="background:linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);">
                         <h1 style="color:white;">심판 모드</h1>
@@ -1698,6 +1768,32 @@
                     </div>
                     
                     <main role="main">
+                    
+                    ${inProgressPractice ? `
+                    <div class="card" style="background:linear-gradient(135deg, #f44336 0%, #c62828 100%); color:white; border:3px solid #ff5722;">
+                        <h2 style="color:white;">⚠️ 진행 중인 연습 경기</h2>
+                        <div style="background:rgba(255,255,255,0.2); padding:12px; border-radius:8px; margin:12px 0;">
+                            <div style="font-size:16px; font-weight:600; margin-bottom:8px;">
+                                ${inProgressPractice.match.player1Name} vs ${inProgressPractice.match.player2Name}
+                            </div>
+                            <div style="font-size:14px; opacity:0.9;">
+                                현재 세트: ${inProgressPractice.match.currentSet}/${inProgressPractice.match.sets} · 
+                                스코어: ${inProgressPractice.match.setScores[inProgressPractice.match.currentSet - 1].player1} - ${inProgressPractice.match.setScores[inProgressPractice.match.currentSet - 1].player2}
+                            </div>
+                        </div>
+                        <button type="button" class="btn" onclick="resumePracticeMatch()" 
+                                style="background:white; color:#f44336; width:100%; font-weight:700; font-size:16px;" 
+                                aria-label="진행 중인 연습 경기 이어서 하기">
+                            🔄 이어서 진행하기
+                        </button>
+                        <button type="button" class="btn" onclick="clearPracticeState()" 
+                                style="background:rgba(255,255,255,0.2); color:white; width:100%; margin-top:8px; font-size:14px;" 
+                                aria-label="진행 중인 연습 경기 삭제">
+                            경기 취소
+                        </button>
+                    </div>
+                    ` : ''}
+                    
                     <div class="card">
                         <div style="background:#e8f5e9; border-left:4px solid #4caf50; padding:12px; border-radius:8px; margin-bottom:16px;">
                             <strong>대회 경기</strong><br>
@@ -6711,7 +6807,19 @@
             
             app.innerHTML = `
                 <div class="card">
-                    <button class="btn" onclick="goTo('project-detail')" style="margin-bottom:16px;">← 경기 목록</button>
+                    ${(() => {
+                        // 뒤로가기 버튼 - 역할별로 다른 화면으로
+                        if (userRole === 'viewer' || !isAuthenticated) {
+                            // 관람자: 실시간 경기 목록 또는 관람 모드 홈으로
+                            return `<button class="btn" onclick="goToViewerHome()" style="margin-bottom:16px;">← 관람 모드로</button>`;
+                        } else if (currentMatch.isPractice) {
+                            // 심판 (연습 경기): 심판 모드 홈으로
+                            return `<button class="btn" onclick="goTo('referee-home')" style="margin-bottom:16px;">← 심판 모드로</button>`;
+                        } else {
+                            // 심판/관리자 (대회 경기): 경기 목록으로
+                            return `<button class="btn" onclick="goTo('project-detail')" style="margin-bottom:16px;">← 경기 목록</button>`;
+                        }
+                    })()}
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
                         <div>
                             <div style="font-weight:600;">세트 ${currentMatch.currentSet}/${currentMatch.sets}</div>
@@ -7093,7 +7201,19 @@
             
             app.innerHTML = `
                 <div class="card">
-                    <button class="btn btn-primary" onclick="goTo('project-detail')" style="margin-bottom:16px;">← 경기 목록으로</button>
+                    ${(() => {
+                        // 뒤로가기 버튼 - 역할별로 다른 화면으로
+                        if (userRole === 'viewer' || !isAuthenticated) {
+                            // 관람자: 실시간 경기 목록 또는 관람 모드 홈으로
+                            return `<button class="btn btn-primary" onclick="goToViewerHome()" style="margin-bottom:16px;">← 관람 모드로</button>`;
+                        } else if (currentMatch.isPractice) {
+                            // 심판 (연습 경기): 심판 모드 홈으로
+                            return `<button class="btn btn-primary" onclick="goTo('referee-home')" style="margin-bottom:16px;">← 심판 모드로</button>`;
+                        } else {
+                            // 심판/관리자 (대회 경기): 경기 목록으로
+                            return `<button class="btn btn-primary" onclick="goTo('project-detail')" style="margin-bottom:16px;">← 경기 목록으로</button>`;
+                        }
+                    })()}
                     <div style="text-align:center; padding:16px; background:var(--success); color:white; border-radius:8px; margin-bottom:16px;">
                         <h2 style="margin:0; color:white;">경기 종료</h2>
                         <div style="font-size:18px; margin-top:8px;">승자: ${winner}</div>
@@ -7283,6 +7403,24 @@
                     focusable.focus();
                 }
             }, 100); // render() 완료 후 실행
+        }
+        
+        // ✨ 관람자를 적절한 화면으로 이동
+        function goToViewerHome() {
+            // 실시간 경기를 보고 있었는지 확인
+            if (currentMatch && currentMatch.isShared) {
+                // 실시간 경기 목록으로
+                goTo('live-practice');
+            } else {
+                // 관람 모드 홈으로
+                goTo('viewer-home');
+            }
+            
+            // 상태 초기화
+            currentProject = null;
+            currentMatch = null;
+            isAuthenticated = false;
+            userRole = 'viewer';
         }
         
         // 대회 유형 변경 시
@@ -14868,6 +15006,60 @@
             console.log('render() 호출 전');
             render();
             console.log('render() 호출 완료');
+        }
+        
+        // ✨ 진행 중인 연습 경기 이어서 하기
+        function resumePracticeMatch() {
+            try {
+                const savedState = sessionStorage.getItem('practiceState');
+                if (!savedState) {
+                    alert('진행 중인 연습 경기를 찾을 수 없습니다.');
+                    goTo('referee-home');
+                    return;
+                }
+                
+                const state = JSON.parse(savedState);
+                console.log('🔄 연습 경기 복구 중:', state);
+                
+                // 프로젝트와 경기 찾기
+                currentProject = projects.find(p => p.id === state.projectId);
+                if (!currentProject) {
+                    alert('프로젝트를 찾을 수 없습니다.');
+                    sessionStorage.removeItem('practiceState');
+                    goTo('referee-home');
+                    return;
+                }
+                
+                currentMatch = currentProject.matches?.find(m => m.id === state.matchId);
+                if (!currentMatch) {
+                    alert('경기를 찾을 수 없습니다.');
+                    sessionStorage.removeItem('practiceState');
+                    goTo('referee-home');
+                    return;
+                }
+                
+                // 상태 복원
+                isAuthenticated = true;
+                screen = 'match';
+                
+                console.log('✅ 연습 경기 복구 완료');
+                announce('연습 경기를 이어서 진행합니다. ' + currentMatch.player1Name + ' 대 ' + currentMatch.player2Name);
+                render();
+            } catch (e) {
+                console.error('❌ 연습 경기 복구 실패:', e);
+                alert('연습 경기 복구에 실패했습니다.');
+                sessionStorage.removeItem('practiceState');
+                goTo('referee-home');
+            }
+        }
+        
+        // ✨ 진행 중인 연습 경기 취소
+        function clearPracticeState() {
+            if (confirm('진행 중인 연습 경기를 취소하시겠습니까?\n경기 기록은 유지되지 않습니다.')) {
+                sessionStorage.removeItem('practiceState');
+                announce('진행 중인 연습 경기가 취소되었습니다.');
+                render();
+            }
         }
         
         // 연습 경기 기록 저장 (Firebase + 로컬)
